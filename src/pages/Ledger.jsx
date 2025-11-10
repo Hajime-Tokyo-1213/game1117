@@ -1,10 +1,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './Ledger.css';
+import { loadLedgerRecords as loadLedgerStorage, migrateLegacyLedgerData } from '../utils/ledgerRecords';
 
 const Ledger = () => {
-  const [salesRecords, setSalesRecords] = useState([]);
+  const [rawLedgerRecords, setRawLedgerRecords] = useState([]);
   const [expandedRecord, setExpandedRecord] = useState(null);
   const [records, setRecords] = useState([]);
+
+  const formatNumber = (value) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num.toLocaleString() : '0';
+  };
+
+  const formatCurrency = (value) => `¥${formatNumber(value ?? 0)}`;
+
+  const formatDate = (value) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('ja-JP');
+  };
+
+  const safeRankClass = (rank) => {
+    if (typeof rank === 'string' && rank.length > 0) {
+      return `rank-${rank.toLowerCase()}`;
+    }
+    return 'rank-unknown';
+  };
   const [filters, setFilters] = useState({
     dateFrom: '',
     dateTo: '',
@@ -14,303 +35,159 @@ const Ledger = () => {
     customerSearch: ''
   });
 
-  // 販売記録を読み込み
-  useEffect(() => {
-    const ledger = JSON.parse(localStorage.getItem('salesLedger') || '[]');
-    setSalesRecords(ledger);
-  }, []);
-
   const loadLedgerRecords = useCallback(() => {
-    const allRecords = [];
-    
-    // 在庫データから買取記録を取得
-    const inventory = JSON.parse(localStorage.getItem('inventory') || '[]');
-    const allApplications = JSON.parse(localStorage.getItem('allApplications') || '[]');
-    
-    // デバッグ情報をコンソールに出力
-    console.log('=== 古物台帳: データ読み込み状況 ===');
-    console.log('inventory件数:', inventory.length);
-    console.log('allApplications件数:', allApplications.length);
-    console.log('inventoryサンプル:', inventory.slice(0, 2));
-    console.log('allApplicationsサンプル:', allApplications.slice(0, 2));
-    
-    inventory.forEach(item => {
-      if (item.sourceType === 'customer' && item.applicationNumber) {
-        const app = allApplications.find(a => a.applicationNumber === item.applicationNumber);
-        
-        // appがなくても、inventoryにcustomer情報があれば使用
-        const customerInfo = app && app.customer ? app.customer : (item.customer || null);
-        
-        if (customerInfo) {
-          // 管理番号がある場合は各管理番号ごとに1レコード作成
-          const managementNumbers = item.managementNumbers || [];
-          if (managementNumbers.length > 0) {
-            managementNumbers.forEach(mgmtNumber => {
-              allRecords.push({
-                id: `${item.id}-${mgmtNumber}`,
-                date: new Date(item.registeredDate).toLocaleDateString('ja-JP'),
-                type: '買取',
-                sku: item.id,
-                managementNumber: mgmtNumber,
-                productName: item.productType === 'software' ? item.softwareName : `${item.manufacturerLabel} - ${item.consoleLabel}`,
-                features: `${item.colorLabel || ''} ${item.conditionLabel || ''}`.trim() || '-',
-                rank: item.assessedRank,
-                quantity: 1,
-                price: item.acquisitionPrice || item.buybackPrice,
-                customerName: customerInfo.name,
-                customerAddress: `${customerInfo.postalCode || ''} ${customerInfo.address || ''}`.trim(),
-                customerOccupation: customerInfo.occupation || '-',
-                customerAge: customerInfo.birthDate ? Math.floor((new Date() - new Date(customerInfo.birthDate)) / (365.25 * 24 * 60 * 60 * 1000)) : '-',
-                saleDate: '-',
-                salePrice: '-',
-                buyer: '-',
-                status: 'in-stock'
-              });
-            });
-          } else {
-            // 管理番号がない場合は従来通り
-            allRecords.push({
-              id: item.id,
-              date: new Date(item.registeredDate).toLocaleDateString('ja-JP'),
-              type: '買取',
-              sku: item.id,
-              managementNumber: '-',
-              productName: item.productType === 'software' ? item.softwareName : `${item.manufacturerLabel} - ${item.consoleLabel}`,
-              features: `${item.colorLabel || ''} ${item.conditionLabel || ''}`.trim() || '-',
-              rank: item.assessedRank,
-              quantity: item.quantity,
-              price: item.acquisitionPrice || item.buybackPrice,
-              customerName: customerInfo.name,
-              customerAddress: `${customerInfo.postalCode || ''} ${customerInfo.address || ''}`.trim(),
-              customerOccupation: customerInfo.occupation || '-',
-              customerAge: customerInfo.birthDate ? Math.floor((new Date() - new Date(customerInfo.birthDate)) / (365.25 * 24 * 60 * 60 * 1000)) : '-',
-              saleDate: '-',
-              salePrice: '-',
-              buyer: '-',
-              status: 'in-stock'
-            });
-          }
+    const ledgerRecords = loadLedgerStorage();
+    console.log('=== Ledger Records 読み込み ===', ledgerRecords);
+
+    setRawLedgerRecords(ledgerRecords);
+
+    const filtered = ledgerRecords.filter(record => {
+      const firstPurchase = record.purchase?.events?.[0] || null;
+      const lastSale = record.sale?.events?.[record.sale.events.length - 1] || null;
+
+      const purchaseDateISO = firstPurchase?.date || null;
+      const saleDateISO = lastSale?.date || null;
+
+      const purchaseDate = purchaseDateISO ? new Date(purchaseDateISO) : null;
+      const saleDate = saleDateISO ? new Date(saleDateISO) : null;
+
+      if (filters.dateFrom) {
+        const fromDate = new Date(filters.dateFrom);
+        if (purchaseDate && purchaseDate < fromDate && (!saleDate || saleDate < fromDate)) {
+          return false;
         }
       }
-    });
-    
-    // 新しい販売履歴（salesHistory）から販売記録を取得
-    const salesHistory = JSON.parse(localStorage.getItem('salesHistory') || '[]');
-    console.log('=== 古物台帳: 販売履歴読み込み ===');
-    console.log('salesHistory件数:', salesHistory.length);
-    console.log('salesHistoryサンプル:', salesHistory.slice(0, 3));
-    
-    salesHistory.forEach(sale => {
-      console.log('処理中の販売記録:', sale.id, sale.salesChannel, sale.soldTo);
-      console.log('販売記録詳細:', {
-        id: sale.id,
-        salesChannel: sale.salesChannel,
-        soldTo: sale.soldTo,
-        soldAt: sale.soldAt,
-        soldPrice: sale.soldPrice,
-        managementNumbers: sale.managementNumbers
-      });
-      
-      // 買取記録を生成（buybackInfoがある場合）
-      if (sale.buybackInfo && sale.buybackInfo.customer) {
-        const buybackInfo = sale.buybackInfo;
-        const buybackManagementNumbers = sale.managementNumbers || [];
-        
-        if (buybackManagementNumbers.length > 0) {
-          buybackManagementNumbers.forEach(mgmtNumber => {
-            allRecords.push({
-              id: `BUYBACK-${sale.id}-${mgmtNumber}`,
-              date: new Date(buybackInfo.buybackDate).toLocaleDateString('ja-JP'),
-              type: '買取',
-              sku: sale.inventoryItemId,
-              managementNumber: mgmtNumber,
-              productName: sale.productType === 'software' ? sale.softwareName : `${sale.manufacturerLabel} - ${sale.consoleLabel}`,
-              features: `${sale.colorLabel || ''} ランク:${sale.assessedRank}`.trim(),
-              rank: sale.assessedRank,
-              quantity: 1,
-              price: buybackInfo.buybackPrice,
-              customerName: buybackInfo.customer.name,
-              customerAddress: `${buybackInfo.customer.postalCode || ''} ${buybackInfo.customer.address || ''}`.trim(),
-              customerOccupation: buybackInfo.customer.occupation || '-',
-              customerAge: buybackInfo.customer.birthDate ? Math.floor((new Date() - new Date(buybackInfo.customer.birthDate)) / (365.25 * 24 * 60 * 60 * 1000)) : '-',
-              saleDate: '-',
-              salePrice: '-',
-              buyer: '-',
-              status: 'sold' // 売却済み
-            });
-          });
-        } else {
-          // 管理番号なし
-          allRecords.push({
-            id: `BUYBACK-${sale.id}`,
-            date: new Date(buybackInfo.buybackDate).toLocaleDateString('ja-JP'),
-            type: '買取',
-            sku: sale.inventoryItemId,
-            managementNumber: '-',
-            productName: sale.productType === 'software' ? sale.softwareName : `${sale.manufacturerLabel} - ${sale.consoleLabel}`,
-            features: `${sale.colorLabel || ''} ランク:${sale.assessedRank}`.trim(),
-            rank: sale.assessedRank,
-            quantity: sale.quantity,
-            price: buybackInfo.buybackPrice,
-            customerName: buybackInfo.customer.name,
-            customerAddress: `${buybackInfo.customer.postalCode || ''} ${buybackInfo.customer.address || ''}`.trim(),
-            customerOccupation: buybackInfo.customer.occupation || '-',
-            customerAge: buybackInfo.customer.birthDate ? Math.floor((new Date() - new Date(buybackInfo.customer.birthDate)) / (365.25 * 24 * 60 * 60 * 1000)) : '-',
-            saleDate: '-',
-            salePrice: '-',
-            buyer: '-',
-            status: 'sold' // 売却済み
-          });
+
+      if (filters.dateTo) {
+        const toDate = new Date(filters.dateTo);
+        if (purchaseDate && purchaseDate > toDate && (!saleDate || saleDate > toDate)) {
+          return false;
         }
       }
-      
-      // 管理番号がある場合は各管理番号ごとに1レコード作成
-      const managementNumbers = sale.managementNumbers || [];
-      console.log('管理番号:', managementNumbers);
-      if (managementNumbers.length > 0) {
-        managementNumbers.forEach(mgmtNumber => {
-          allRecords.push({
-            id: `${sale.id}-${mgmtNumber}`,
-            date: new Date(sale.soldAt).toLocaleDateString('ja-JP'),
-            type: '販売',
-            sku: sale.inventoryItemId,
-            managementNumber: mgmtNumber,
-            productName: sale.productType === 'software' ? sale.softwareName : `${sale.manufacturerLabel} - ${sale.consoleLabel}`,
-            features: `${sale.colorLabel || ''} ランク:${sale.assessedRank}`.trim(),
-            rank: sale.assessedRank,
-            quantity: 1,
-            price: '-',
-            customerName: '-',
-            customerAddress: '-',
-            customerOccupation: '-',
-            customerAge: '-',
-            saleDate: new Date(sale.soldAt).toLocaleDateString('ja-JP'),
-            salePrice: sale.soldPrice,
-            buyer: sale.soldTo,
-            status: 'sold'
-          });
-        });
-      } else {
-        // 管理番号がない場合は従来通り（Zaico同期の場合は必ず表示）
-        console.log('管理番号なしの販売記録を処理:', sale.id, sale.salesChannel, sale.soldTo);
-        console.log('古物台帳レコード作成:', {
-          id: sale.id,
-          type: '販売',
-          productName: sale.productType === 'software' ? sale.softwareName : `${sale.manufacturerLabel} - ${sale.consoleLabel}`,
-          customerName: sale.soldTo,
-          salesChannel: sale.salesChannel
-        });
-        allRecords.push({
-          id: sale.id,
-          date: new Date(sale.soldAt).toLocaleDateString('ja-JP'),
-          type: '販売',
-          sku: sale.inventoryItemId,
-          managementNumber: '-',
-          productName: sale.productType === 'software' ? sale.softwareName : `${sale.manufacturerLabel} - ${sale.consoleLabel}`,
-          features: `${sale.colorLabel || ''} ランク:${sale.assessedRank}`.trim(),
-          rank: sale.assessedRank,
-          quantity: sale.quantity,
-          price: '-',
-          customerName: '-',
-          customerAddress: '-',
-          customerOccupation: '-',
-          customerAge: '-',
-          saleDate: new Date(sale.soldAt).toLocaleDateString('ja-JP'),
-          salePrice: sale.soldPrice,
-          buyer: sale.soldTo,
-          status: 'sold'
-        });
+
+      if (filters.transactionType === 'purchase' && record.sale.totalQuantity > 0) {
+        return false;
       }
-    });
-    
-    // 日付順にソート（新しい順）
-    allRecords.sort((a, b) => {
-      const dateA = new Date(a.date.split('/').reverse().join('-'));
-      const dateB = new Date(b.date.split('/').reverse().join('-'));
-      return dateB - dateA;
-    });
-    
-    // 重複レコードを削除（商品名、価格、日時の組み合わせで重複判定）
-    const uniqueRecords = [];
-    const seenCombinations = new Set();
-    
-    allRecords.forEach(record => {
-      // 重複判定のキーを作成（管理番号も含める）
-      const duplicateKey = `${record.productName}-${record.price}-${record.date}-${record.customerName}-${record.customerAddress}-${record.managementNumber}`;
-      
-      if (!seenCombinations.has(duplicateKey)) {
-        seenCombinations.add(duplicateKey);
-        uniqueRecords.push(record);
-      } else {
-        console.log('重複レコードをスキップ:', record.id, record.productName, record.price, record.customerAddress, record.managementNumber);
+
+      if (filters.transactionType === 'sale' && record.sale.totalQuantity === 0) {
+        return false;
       }
-    });
-    
-    // フィルター処理
-    let filteredRecords = uniqueRecords;
-    
-    // 日付フィルター
-    if (filters.dateFrom) {
-      const fromDate = new Date(filters.dateFrom);
-      filteredRecords = filteredRecords.filter(record => {
-        const recordDate = new Date(record.date.split('/').reverse().join('-'));
-        return recordDate >= fromDate;
-      });
-    }
-    
-    if (filters.dateTo) {
-      const toDate = new Date(filters.dateTo);
-      filteredRecords = filteredRecords.filter(record => {
-        const recordDate = new Date(record.date.split('/').reverse().join('-'));
-        return recordDate <= toDate;
-      });
-    }
-    
-    // 取引種別フィルター
-    if (filters.transactionType) {
-      const typeMap = { 'purchase': '買取', 'sale': '販売' };
-      filteredRecords = filteredRecords.filter(record => record.type === typeMap[filters.transactionType]);
-    }
-    
-    // 商品名検索
+
     if (filters.productSearch) {
       const searchTerm = filters.productSearch.toLowerCase();
-      filteredRecords = filteredRecords.filter(record => 
-        record.productName.toLowerCase().includes(searchTerm)
-      );
-    }
-    
-    // SKU検索
+        const reservoir = [
+          record.product?.title,
+          record.product?.consoleLabel,
+          record.product?.softwareName,
+          record.product?.manufacturerLabel
+        ]
+          .filter(Boolean)
+          .map(str => str.toLowerCase());
+
+        if (!reservoir.some(str => str.includes(searchTerm))) {
+          return false;
+        }
+      }
+
     if (filters.skuSearch) {
       const searchTerm = filters.skuSearch.toLowerCase();
-      filteredRecords = filteredRecords.filter(record => 
-        record.sku.toLowerCase().includes(searchTerm) ||
-        record.managementNumber.toLowerCase().includes(searchTerm)
-      );
-    }
-    
-    // 顧客名検索
+        const skuMatch = (record.inventoryId || '').toLowerCase().includes(searchTerm);
+        const managementMatch = (record.managementNumbers || []).some(num =>
+          String(num).toLowerCase().includes(searchTerm)
+        );
+        if (!skuMatch && !managementMatch) {
+          return false;
+        }
+      }
+
     if (filters.customerSearch) {
       const searchTerm = filters.customerSearch.toLowerCase();
-      filteredRecords = filteredRecords.filter(record => 
-        record.customerName.toLowerCase().includes(searchTerm) ||
-        (record.buyer && record.buyer.toLowerCase().includes(searchTerm))
-      );
-    }
-    
-    console.log('=== 古物台帳: 最終レコード ===');
-    console.log('元のレコード数:', allRecords.length);
-    console.log('重複削除後のレコード数:', uniqueRecords.length);
-    console.log('フィルター後のレコード数:', filteredRecords.length);
-    console.log('販売レコード数:', filteredRecords.filter(r => r.type === '販売').length);
-    console.log('Zaico同期レコード数:', filteredRecords.filter(r => r.customerAddress === 'Zaico同期').length);
-    console.log('レコードサンプル:', filteredRecords.slice(0, 5));
-    
-    setRecords(filteredRecords);
+        const customer = record.product?.customer;
+        const purchaseMatch = customer?.name?.toLowerCase().includes(searchTerm);
+        const buyerMatch = record.sale?.events?.some(event => {
+          const buyerName = typeof event.buyer === 'string' ? event.buyer : event.buyer?.name;
+          return buyerName?.toLowerCase().includes(searchTerm);
+        });
+
+        if (!purchaseMatch && !buyerMatch) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    const tableRecords = filtered.map(record => {
+      const firstPurchase = record.purchase?.events?.[0] || null;
+      const lastSale = record.sale?.events?.[record.sale.events.length - 1] || null;
+      const purchaseDateISO = firstPurchase?.date || null;
+      const saleDateISO = lastSale?.date || null;
+
+      const customer = record.product?.customer || {};
+      const buyerNameRaw =
+        (lastSale?.buyer && typeof lastSale.buyer === 'object' ? lastSale.buyer.name : lastSale?.buyer) ||
+        '-';
+
+      const customerAddress =
+        customer.address || customer.postalCode
+          ? `${customer.postalCode || ''} ${customer.address || ''}`.trim()
+          : '-';
+
+      const customerAge =
+        customer.birthDate
+          ? Math.floor((new Date() - new Date(customer.birthDate)) / (365.25 * 24 * 60 * 60 * 1000))
+          : '-';
+
+      const features = [
+        record.product?.colorLabel || record.product?.color || '',
+        record.product?.assessedRank ? `ランク:${record.product.assessedRank}` : ''
+      ]
+        .filter(Boolean)
+        .join(' ') || '-';
+      const hasSale = (record.sale?.totalQuantity || 0) > 0;
+
+      return {
+        id: record.id,
+        record,
+        date: formatDate(purchaseDateISO),
+        rawPurchaseDate: purchaseDateISO,
+        type: hasSale ? '販売' : '買取',
+        sku: record.inventoryId || '-',
+        managementNumber: (record.managementNumbers || []).join(', ') || '-',
+        productName: record.product?.title || '-',
+        features,
+        rank: record.product?.assessedRank || '-',
+        quantity: record.purchase?.totalQuantity || 0,
+        price: record.purchase?.totalCostJPY || 0,
+        customerName: customer.name || '-',
+        customerAddress,
+        customerOccupation: customer.occupation || '-',
+        customerAge,
+        saleDate: hasSale ? formatDate(saleDateISO) : '-',
+        rawSaleDate: saleDateISO,
+        salePrice: hasSale ? record.sale?.totalRevenueJPY || 0 : '-',
+        buyer: hasSale ? buyerNameRaw : '-',
+        status: record.status
+      };
+    });
+
+    tableRecords.sort((a, b) => {
+      const dateA = new Date(a.rawSaleDate || a.rawPurchaseDate || 0).getTime();
+      const dateB = new Date(b.rawSaleDate || b.rawPurchaseDate || 0).getTime();
+      return dateB - dateA;
+    });
+
+    setRecords(tableRecords);
   }, [filters]);
+
+  const saleLedgerRecords = rawLedgerRecords.filter(record => (record.sale?.totalQuantity || 0) > 0);
+  const totalPurchaseCost = rawLedgerRecords.reduce((sum, record) => sum + (record.purchase?.totalCostJPY || 0), 0);
+  const totalSalesAmount = rawLedgerRecords.reduce((sum, record) => sum + (record.sale?.totalRevenueJPY || 0), 0);
+  const totalProfitAmount = totalSalesAmount - totalPurchaseCost;
 
   // 初期読み込み
   useEffect(() => {
+    migrateLegacyLedgerData();
     loadLedgerRecords();
   }, [loadLedgerRecords]);
 
@@ -383,6 +260,7 @@ const Ledger = () => {
         
         // 古物台帳データをクリア
         localStorage.removeItem('ledger');
+        localStorage.removeItem('ledgerRecords');
         console.log('古物台帳データをクリアしました');
         
         // 在庫データをクリア
@@ -412,10 +290,15 @@ const Ledger = () => {
 
   const getStatusBadge = (status) => {
     switch(status) {
-      case 'sold': return <span className="status-badge status-sold">売却済</span>;
-      case 'in-stock': return <span className="status-badge status-in-stock">在庫</span>;
-      case 'reserved': return <span className="status-badge status-reserved">予約済</span>;
-      default: return null;
+      case 'sold':
+        return <span className="status-badge status-sold">売却済</span>;
+      case 'partial':
+        return <span className="status-badge status-reserved">一部販売</span>;
+      case 'in_stock':
+      case 'in-stock':
+        return <span className="status-badge status-in-stock">在庫</span>;
+      default:
+        return <span className="status-badge status-in-stock">状態不明</span>;
     }
   };
 
@@ -496,137 +379,144 @@ const Ledger = () => {
       <div className="info-section">
         <div className="info-item">
           <div className="info-label">販売記録件数</div>
-          <div className="info-value">{records.filter(r => r.type === '販売').length}</div>
+          <div className="info-value">{saleLedgerRecords.length}</div>
         </div>
         <div className="info-item">
           <div className="info-label">総仕入れ額</div>
           <div className="info-value" style={{ color: '#e74c3c' }}>
-            ¥{records.filter(r => r.type === '買取').reduce((sum, r) => sum + (Number(r.price) || 0), 0).toLocaleString()}
+            {formatCurrency(totalPurchaseCost)}
           </div>
         </div>
         <div className="info-item">
           <div className="info-label">総販売額</div>
           <div className="info-value" style={{ color: '#3498db' }}>
-            ¥{records.filter(r => r.type === '販売').reduce((sum, r) => sum + (Number(r.salePrice) || 0), 0).toLocaleString()}
+            {formatCurrency(totalSalesAmount)}
           </div>
         </div>
         <div className="info-item">
           <div className="info-label">総利益</div>
           <div className="info-value" style={{ color: '#27ae60' }}>
-            ¥{records.filter(r => r.type === '販売').reduce((sum, r) => {
-              const salePrice = Number(r.salePrice) || 0;
-              const buyPrice = Number(r.price) || 0;
-              return sum + (salePrice - buyPrice);
-            }, 0).toLocaleString()}
+            {formatCurrency(totalProfitAmount)}
           </div>
         </div>
       </div>
 
       {/* 販売記録セクション */}
-      {salesRecords.length > 0 && (
+      {saleLedgerRecords.length > 0 && (
         <div className="sales-records-section">
           <h2>📊 販売記録（利益計算）</h2>
-          <p className="section-subtitle">海外バイヤーへの販売記録と利益を確認できます</p>
+          <p className="section-subtitle">海外販売やその他チャネルの販売データをまとめて確認できます</p>
           
-          {salesRecords.map(record => (
-            <div key={record.id} className="sales-record-card">
-              <div 
-                className="sales-record-header"
-                onClick={() => setExpandedRecord(expandedRecord === record.id ? null : record.id)}
-              >
-                <div className="record-header-left">
-                  <h3>販売記録 {record.id}</h3>
-                  <p className="record-date">販売日: {new Date(record.soldDate).toLocaleDateString('ja-JP')}</p>
-                  <p className="record-request">リクエスト番号: {record.requestNumber}</p>
-                </div>
-                <div className="record-header-right">
-                  <div className="record-summary">
-                    <div className="summary-item">
-                      <span className="summary-label">仕入れ:</span>
-                      <span className="summary-value cost">¥{record.summary.totalAcquisitionCost.toLocaleString()}</span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="summary-label">販売:</span>
-                      <span className="summary-value sales">¥{record.summary.totalSalesAmount.toLocaleString()}</span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="summary-label">利益:</span>
-                      <span className="summary-value profit">¥{record.summary.totalProfit.toLocaleString()}</span>
-                    </div>
-                  </div>
-                  <span className="expand-icon">{expandedRecord === record.id ? '▼' : '▶'}</span>
-                </div>
-              </div>
+          {saleLedgerRecords.map(record => {
+            const lastSaleEvent = record.sale.events[record.sale.events.length - 1];
+            const purchaseUnitCost = record.purchase?.averageUnitCostJPY || 0;
+            const totalProfitJPY = record.sale.totalRevenueJPY - record.purchase.totalCostJPY;
+            const customer = record.product?.customer || {};
+            const buyerName =
+              (lastSaleEvent?.buyer && typeof lastSaleEvent.buyer === 'object'
+                ? lastSaleEvent.buyer.name
+                : lastSaleEvent?.buyer) || '-';
+            const saleDateLabel = formatDate(lastSaleEvent?.date);
+            const productTitle = record.product?.title || '販売記録';
 
-              {expandedRecord === record.id && (
-                <div className="sales-record-details">
-                  <div className="customer-info">
-                    <h4>👤 顧客情報</h4>
-                    <p><strong>名前:</strong> {record.customer.name}</p>
-                    <p><strong>国:</strong> {record.customer.country || 'N/A'}</p>
-                    <p><strong>メール:</strong> {record.customer.email}</p>
+            return (
+              <div key={record.id} className="sales-record-card">
+                <div
+                  className="sales-record-header"
+                  onClick={() => setExpandedRecord(expandedRecord === record.id ? null : record.id)}
+                >
+                  <div className="record-header-left">
+                    <h3>{productTitle}</h3>
+                    <p className="record-date">最終販売日: {saleDateLabel}</p>
+                    <p className="record-request">在庫ID: {record.inventoryId}</p>
                   </div>
+                  <div className="record-header-right">
+                    <div className="record-summary">
+                      <div className="summary-item">
+                        <span className="summary-label">仕入れ:</span>
+                        <span className="summary-value cost">{formatCurrency(record.purchase.totalCostJPY)}</span>
+                      </div>
+                      <div className="summary-item">
+                        <span className="summary-label">販売:</span>
+                        <span className="summary-value sales">{formatCurrency(record.sale.totalRevenueJPY)}</span>
+                      </div>
+                      <div className="summary-item">
+                        <span className="summary-label">利益:</span>
+                        <span className="summary-value profit">{formatCurrency(totalProfitJPY)}</span>
+                      </div>
+                    </div>
+                    <span className="expand-icon">{expandedRecord === record.id ? '▼' : '▶'}</span>
+                  </div>
+                </div>
 
-                  <div className="items-detail">
-                    <h4>📦 販売商品詳細</h4>
-                    <table className="sales-detail-table">
-                      <thead>
-                        <tr>
-                          <th>商品名</th>
-                          <th>ランク</th>
-                          <th>数量</th>
-                          <th>仕入れ単価</th>
-                          <th>仕入れ合計</th>
-                          <th>販売単価</th>
-                          <th>販売合計</th>
-                          <th>利益/台</th>
-                          <th>利益合計</th>
-                          <th>仕入れ元</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {record.items.map((item, idx) => (
-                          <tr key={idx}>
-                            <td>{item.product}</td>
-                            <td>
-                              <span className={`rank-badge rank-${item.rank.toLowerCase()}`}>
-                                {item.rank}
-                              </span>
-                            </td>
-                            <td>{item.quantity}台</td>
-                            <td>¥{item.acquisitionPrice.toLocaleString()}</td>
-                            <td>¥{item.totalAcquisitionCost.toLocaleString()}</td>
-                            <td>¥{item.salesPrice.toLocaleString()}</td>
-                            <td>¥{item.totalSalesAmount.toLocaleString()}</td>
-                            <td className="profit-cell">¥{item.profit.toLocaleString()}</td>
-                            <td className="profit-cell">¥{item.totalProfit.toLocaleString()}</td>
-                            <td>
-                              {item.source.type === 'customer' ? (
-                                <span>👤 {item.source.name}</span>
-                              ) : (
-                                <span>🏢 {item.source.name}</span>
-                              )}
-                            </td>
+                {expandedRecord === record.id && (
+                  <div className="sales-record-details">
+                    <div className="customer-info">
+                      <h4>👤 買取時の顧客情報</h4>
+                      <p><strong>名前:</strong> {customer.name || 'N/A'}</p>
+                      <p><strong>住所:</strong> {customer.address || 'N/A'}</p>
+                      <p><strong>メール:</strong> {customer.email || 'N/A'}</p>
+                    </div>
+
+                    <div className="items-detail">
+                      <h4>📦 販売明細</h4>
+                      <table className="sales-detail-table">
+                        <thead>
+                          <tr>
+                            <th>販売日</th>
+                            <th>数量</th>
+                            <th>販売単価</th>
+                            <th>販売合計</th>
+                            <th>仕入原価</th>
+                            <th>利益</th>
+                            <th>送料</th>
+                            <th>販売先</th>
+                            <th>チャネル</th>
+                            <th>担当者</th>
                           </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="total-row">
-                          <td colSpan="4">合計</td>
-                          <td>¥{record.summary.totalAcquisitionCost.toLocaleString()}</td>
-                          <td colSpan="1"></td>
-                          <td>¥{record.summary.totalSalesAmount.toLocaleString()}</td>
-                          <td colSpan="1"></td>
-                          <td className="profit-total">¥{record.summary.totalProfit.toLocaleString()}</td>
-                          <td></td>
-                        </tr>
-                      </tfoot>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {record.sale.events.map((event, idx) => {
+                            const eventBuyer =
+                              (event.buyer && typeof event.buyer === 'object' ? event.buyer.name : event.buyer) || '-';
+                            const eventProfit = event.totalPriceJPY - purchaseUnitCost * event.quantity;
+                            const shippingDisplay = event.shippingFeeJPY
+                              ? formatCurrency(event.shippingFeeJPY)
+                              : '-';
+                            return (
+                              <tr key={idx}>
+                                <td>{formatDate(event.date)}</td>
+                                <td>{formatNumber(event.quantity)}</td>
+                                <td>{formatCurrency(event.unitPriceJPY)}</td>
+                                <td>{formatCurrency(event.totalPriceJPY)}</td>
+                                <td>{formatCurrency(purchaseUnitCost * event.quantity)}</td>
+                                <td className="profit-cell">{formatCurrency(eventProfit)}</td>
+                                <td>{shippingDisplay}</td>
+                                <td>{eventBuyer}</td>
+                                <td>{event.salesChannel || '-'}</td>
+                                <td>{event.staff || '-'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="total-row">
+                            <td colSpan="2">合計</td>
+                            <td>{formatCurrency(purchaseUnitCost)}</td>
+                            <td>{formatCurrency(record.sale.totalRevenueJPY)}</td>
+                            <td>{formatCurrency(record.purchase.totalCostJPY)}</td>
+                            <td className="profit-total">{formatCurrency(totalProfitJPY)}</td>
+                            <td>{formatCurrency(record.sale.totalShippingJPY)}</td>
+                            <td colSpan="3"></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -672,27 +562,37 @@ const Ledger = () => {
                 </tr>
               </thead>
               <tbody>
-                {records.map(record => (
+                {records.map(record => {
+                  const rankClass = safeRankClass(record.rank);
+                  const quantity = formatNumber(record.quantity ?? 0);
+                  const price = formatCurrency(record.price);
+                  const salePrice = record.salePrice === '-' || record.salePrice === undefined
+                    ? '-'
+                    : formatCurrency(record.salePrice);
+
+          const buyerName = record.buyer || '-';
+
+          return (
                   <tr key={record.id}>
-                    <td>{record.date}</td>
-                    <td className={record.type === '買取' ? 'type-purchase' : 'type-sale'}>{record.type}</td>
-                    <td><span className="sku-code">{record.sku}</span></td>
-                    <td>{record.managementNumber}</td>
-                    <td>{record.productName}</td>
-                    <td>{record.features}</td>
-                    <td><span className={`rank-badge rank-${record.rank.toLowerCase()}`}>{record.rank}</span></td>
-                    <td>{record.quantity}</td>
-                    <td>¥{record.price.toLocaleString()}</td>
-                    <td>{record.customerName}</td>
-                    <td>{record.customerAddress}</td>
-                    <td>{record.customerOccupation}</td>
-                    <td>{record.customerAge}</td>
-                    <td>{record.saleDate}</td>
-                    <td>{record.salePrice === '-' ? '-' : `¥${Number(record.salePrice).toLocaleString()}`}</td>
-                    <td>{record.buyer}</td>
+                    <td>{record.date || '-'}</td>
+                    <td className={record.type === '買取' ? 'type-purchase' : 'type-sale'}>{record.type || '-'}</td>
+                    <td><span className="sku-code">{record.sku || '-'}</span></td>
+                    <td>{record.managementNumber || '-'}</td>
+                    <td>{record.productName || '-'}</td>
+                    <td>{record.features || '-'}</td>
+                    <td><span className={`rank-badge ${rankClass}`}>{record.rank || '-'}</span></td>
+                    <td>{quantity}</td>
+                    <td>{price}</td>
+                    <td>{record.customerName || '-'}</td>
+                    <td>{record.customerAddress || '-'}</td>
+                    <td>{record.customerOccupation || '-'}</td>
+                    <td>{record.customerAge || '-'}</td>
+                    <td>{record.saleDate || '-'}</td>
+            <td>{salePrice}</td>
+            <td>{buyerName}</td>
                     <td>{getStatusBadge(record.status)}</td>
                   </tr>
-                ))}
+                );})}
               </tbody>
             </table>
           </div>

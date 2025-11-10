@@ -35,19 +35,8 @@ const Home = () => {
 
       {isOverseasCustomer && (
         <div className="welcome-section">
-          <h2>Customer Menu</h2>
-          <div className="menu-grid">
-            <Link to="/sales-request" className="menu-card overseas">
-              <div className="menu-icon">🛒</div>
-              <h3>Product Request</h3>
-              <p>Request game consoles and software</p>
-            </Link>
-            <Link to="/my-orders" className="menu-card overseas">
-              <div className="menu-icon">📋</div>
-              <h3>Order History</h3>
-              <p>Check your order status</p>
-            </Link>
-          </div>
+          <h2>Customer Portal</h2>
+          <p>現在、海外バイヤー向けの機能はスタッフ側で管理されています。ご質問がございましたら、スタッフまでお問い合わせください。</p>
         </div>
       )}
 

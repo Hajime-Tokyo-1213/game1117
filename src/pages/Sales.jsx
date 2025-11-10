@@ -4,6 +4,8 @@ import { getAllConsoles } from '../utils/productMaster';
 import { generateProductCode } from '../utils/productCodeGenerator';
 import { calculateBuyerPrice } from '../utils/priceCalculator';
 import { createOutboundItemInZaico, logSyncActivity } from '../utils/zaicoApi';
+import { recordLedgerSale } from '../utils/ledgerRecords';
+import BuyerSelector from '../components/BuyerSelector';
 import './Sales.css';
 
 // 担当者リスト（Rating.jsxと同じ）
@@ -21,29 +23,74 @@ const getEnglishName = (fullName) => {
   return match ? match[1] : fullName;
 };
 
-// 担当者名から日本語名を抽出
+// 担当者名から日本語名を抽出　
+
 const getJapaneseName = (fullName) => {
   if (!fullName) return '';
   const match = fullName.match(/^(.+?)（/);
   return match ? match[1] : fullName;
 };
 
-const Sales = () => {
-  const [viewMode, setViewMode] = useState('selection'); // 'selection', 'pending', 'completed', 'detail'
-  const [previousViewMode, setPreviousViewMode] = useState(null);
-  const [selectedRequestNumber, setSelectedRequestNumber] = useState(null);
-  const [requests, setRequests] = useState([]);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [showShippingInfo, setShowShippingInfo] = useState(true);
-  const [salesStaffName, setSalesStaffName] = useState(''); // 販売担当者
+const ITEMS_PER_PAGE = 20;
 
-  // 送料と配送期間の一時入力値（見積もり中のリアルタイム表示用）
-  const [tempShippingFee, setTempShippingFee] = useState(0);
-  const [tempDeliveryDays, setTempDeliveryDays] = useState('');
+const createPaginationRange = (currentPage, totalPages) => {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, idx) => idx + 1);
+  }
+
+  const range = [1];
+  const start = Math.max(2, currentPage - 1);
+  const end = Math.min(totalPages - 1, currentPage + 1);
+
+  if (start > 2) {
+    range.push('left-ellipsis');
+  } else {
+    for (let page = 2; page < start; page += 1) {
+      range.push(page);
+    }
+  }
+
+  for (let page = start; page <= end; page += 1) {
+    range.push(page);
+  }
+
+  if (end < totalPages - 1) {
+    range.push('right-ellipsis');
+  } else {
+    for (let page = end + 1; page < totalPages; page += 1) {
+      range.push(page);
+    }
+  }
+
+  range.push(totalPages);
+  return range;
+};
+
+const Sales = () => {
+  // 新しい構造: 'selection', 'new-sale', 'history', 'sale-detail'
+  const [viewMode, setViewMode] = useState('selection');
+  const [previousViewMode, setPreviousViewMode] = useState(null);
   
-  // 在庫選択機能
-  const [showInventorySelection, setShowInventorySelection] = useState(false);
-  const [selectedInventories, setSelectedInventories] = useState({}); // { itemId: [{ invId, quantity }] }
+  // 新規販売作成用の状態
+  const [selectedBuyer, setSelectedBuyer] = useState(null);
+  const [showBuyerSelector, setShowBuyerSelector] = useState(false);
+  const [saleStep, setSaleStep] = useState(1); // 1: バイヤー選択, 2: 商品選択, 3: 価格設定, 4: 発送情報, 5: 確認
+  const [selectedItems, setSelectedItems] = useState([]); // 選択した商品リスト
+  const [selectedInventories, setSelectedInventories] = useState({}); // { inventoryId: quantity } または { requestItemId: [{ invId, quantity }] }
+  const [inventorySearchQuery, setInventorySearchQuery] = useState('');
+  const [inventoryPage, setInventoryPage] = useState(1);
+  const [itemPricesUSD, setItemPricesUSD] = useState({}); // { inventoryId: priceUSD }
+  const [shippingFeeUSD, setShippingFeeUSD] = useState(0);
+  const [shippingMethod, setShippingMethod] = useState('EMS');
+  const [deliveryDays, setDeliveryDays] = useState('');
+  const [trackingNumber, setTrackingNumber] = useState('');
+  const [shippedDate, setShippedDate] = useState('');
+  const [salesStaffName, setSalesStaffName] = useState('');
+  const [notes, setNotes] = useState('');
+  
+  // 販売履歴
+  const [salesHistory, setSalesHistory] = useState([]);
+  const [selectedSaleId, setSelectedSaleId] = useState(null);
   
   // 管理番号モーダル
   const [showManagementNumberModal, setShowManagementNumberModal] = useState(false);
@@ -51,10 +98,63 @@ const Sales = () => {
   const [currentItemInfo, setCurrentItemInfo] = useState(null);
   
   // 価格計算情報の表示
-  const [priceCalculations, setPriceCalculations] = useState({}); // { itemId: { basePrice, adjustment, finalPrice } }
+  const [priceCalculations, setPriceCalculations] = useState({});
 
-  // 為替レート（USD to JPY）
-  const EXCHANGE_RATE = 150; // $1 = ¥150
+  // 為替レート（USD to JPY）- 後で設定画面から変更可能にする
+  const EXCHANGE_RATE = parseFloat(localStorage.getItem('exchangeRate') || '150');
+  
+  const getInventoryById = (inventoryList, targetId) => {
+    return inventoryList.find(inv => String(inv.id) === String(targetId));
+  };
+
+  const buildSelectedInventoryItems = (inventoryList) => {
+    const aggregated = new Map();
+
+    Object.entries(selectedInventories).forEach(([key, value]) => {
+      if (!value) return;
+
+      const appendSelection = (inventoryId, quantity) => {
+        const inv = getInventoryById(inventoryList, inventoryId);
+        const qty = Number(quantity) || 0;
+        if (!inv || qty <= 0) return;
+
+        if (!aggregated.has(inv.id)) {
+          aggregated.set(inv.id, {
+            ...inv,
+            selectedQuantity: 0,
+            priceUSD: itemPricesUSD[inv.id] ?? 0
+          });
+        }
+
+        const entry = aggregated.get(inv.id);
+        entry.selectedQuantity += qty;
+        if (itemPricesUSD[inv.id] !== undefined) {
+          entry.priceUSD = itemPricesUSD[inv.id];
+        }
+      };
+
+      if (Array.isArray(value)) {
+        value.forEach(selection => {
+          if (!selection) return;
+          appendSelection(selection.invId, selection.quantity);
+        });
+      } else {
+        appendSelection(key, value);
+      }
+    });
+
+    return Array.from(aggregated.values());
+  };
+
+  // USDをJPYに変換（Zaico連携用）
+  const convertUSDToJPY = (usd) => {
+    return Math.round(usd * EXCHANGE_RATE);
+  };
+  
+  // JPYをUSDに変換（表示用）
+  const convertJPYToUSD = (jpy) => {
+    return Math.round(jpy / EXCHANGE_RATE * 100) / 100;
+  };
 
   // 日本時間の今日の日付を取得
   const getTodayJST = () => {
@@ -83,98 +183,66 @@ const Sales = () => {
     licenseEn: 'Used Goods Business License: Tokyo Metropolitan Police No. 123456789'
   };
 
-  // localStorageからリクエストデータを取得
-  const loadRequests = () => {
-    const storedRequests = localStorage.getItem('salesRequests');
-    if (storedRequests) {
-      setRequests(JSON.parse(storedRequests));
-    } else {
-      setRequests([]);
-    }
+  // 販売履歴を読み込み（完了した販売のみ）
+  const loadSalesHistory = () => {
+    const history = JSON.parse(localStorage.getItem('salesHistory') || '[]');
+    // 海外販売のみをフィルタリング（salesChannel === 'overseas'）
+    const overseasSales = history.filter(sale => sale.salesChannel === 'overseas');
+    setSalesHistory(overseasSales);
   };
 
   useEffect(() => {
-    loadRequests();
+    loadSalesHistory();
+    // 発送日を今日に設定
+    const today = getTodayJST();
+    setShippedDate(today);
   }, []);
 
   // ページがアクティブになった時にデータを再読み込み
   useEffect(() => {
-    const handleFocus = () => {
-      loadRequests();
-    };
-
     const handleStorageChange = (e) => {
-      if (e.key === 'salesRequests') {
-        loadRequests();
+      if (e.key === 'salesHistory') {
+        loadSalesHistory();
       }
     };
 
-    window.addEventListener('focus', handleFocus);
     window.addEventListener('storage', handleStorageChange);
-
-    // 定期的にデータを更新（5秒ごと）
-    const intervalId = setInterval(() => {
-      loadRequests();
-    }, 5000);
-
     return () => {
-      window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleStorageChange);
-      clearInterval(intervalId);
     };
   }, []);
 
-  const currentReq = selectedRequestNumber ? requests.find(r => r.requestNumber === selectedRequestNumber) : null;
+  // 新規販売作成を開始
+  const handleStartNewSale = () => {
+    setViewMode('new-sale');
+    setSaleStep(1);
+    setSelectedBuyer(null);
+    setSelectedItems([]);
+    setSelectedInventories({});
+    setItemPricesUSD({});
+    setShippingFeeUSD(0);
+    setDeliveryDays('');
+    setTrackingNumber('');
+    setSalesStaffName('');
+    setNotes('');
+  };
 
-  // 選択中のリクエストが変わったら、送料と配送期間を初期化
-  useEffect(() => {
-    if (currentReq) {
-      setTempShippingFee(currentReq.shippingFee || 0);
-      setTempDeliveryDays(currentReq.deliveryDays || '');
-      // 担当者名を設定（既にある場合）
-      if (currentReq.salesStaffName) {
-        setSalesStaffName(currentReq.salesStaffName);
-      } else {
-        setSalesStaffName('');
-      }
-      
-      // 在庫選択をリセット（新しいリクエスト用）
+  // 新規販売作成をキャンセル
+  const handleCancelNewSale = () => {
+    if (window.confirm('新規販売作成をキャンセルしますか？入力内容は失われます。')) {
+      setViewMode('selection');
+      setSaleStep(1);
+      setSelectedBuyer(null);
+      setSelectedItems([]);
       setSelectedInventories({});
-      
-      // 見積もり中（pending）の場合は価格を自動計算
-      if (currentReq.status === 'pending') {
-        calculateAllPrices();
-      }
+      setItemPricesUSD({});
+      setShippingFeeUSD(0);
+      setDeliveryDays('');
+      setTrackingNumber('');
+      setSalesStaffName('');
+      setNotes('');
     }
-  }, [selectedRequestNumber]); // currentReq?.requestNumberを削除
-
-  // 基準価格の変更を監視して価格を再計算
-  useEffect(() => {
-    if (currentReq && currentReq.status === 'pending') {
-      const handleStorageChange = (e) => {
-        // 基準価格関連のキーの変更のみを監視
-        if (e.key === 'basePrices' || e.key === 'buyerAdjustments') {
-          console.log('基準価格が変更されました:', e.key);
-          // 手動入力された価格は保護して再計算
-          calculateAllPrices();
-        }
-      };
-
-      // localStorageの変更を監視
-      window.addEventListener('storage', handleStorageChange);
-
-      const handleBasePriceUpdate = (event) => {
-        console.log('基準価格が更新されました:', event.detail);
-        calculateAllPricesWithOverride(); // 強制更新で価格を再計算
-      };
-      window.addEventListener('basePriceUpdated', handleBasePriceUpdate);
-
-      return () => {
-        window.removeEventListener('storage', handleStorageChange);
-        window.removeEventListener('basePriceUpdated', handleBasePriceUpdate);
-      };
-    }
-  }, [currentReq?.requestNumber, currentReq?.status]); // requestNumberを追加してより厳密に
+  };
 
   // 在庫から利用可能数を取得
   const getAvailableStock = (item) => {
@@ -243,7 +311,25 @@ const Sales = () => {
     setShowManagementNumberModal(true);
   };
 
-  // 在庫選択を追加
+  // 在庫を選択（新構造用：inventoryIdを直接キーに使用）
+  const handleSelectInventoryItem = (inventoryId, quantity) => {
+    setSelectedInventories(prev => {
+      if (quantity === 0) {
+        // 数量0なら削除
+        const newState = { ...prev };
+        delete newState[inventoryId];
+        return newState;
+      } else {
+        // 更新または追加
+        return {
+          ...prev,
+          [inventoryId]: quantity
+        };
+      }
+    });
+  };
+
+  // 在庫選択を追加（旧構造用：後で削除予定）
   const handleSelectInventory = (itemId, invId, quantity, requestedQuantity) => {
     // 現在の選択状況を取得
     const current = selectedInventories[itemId] || [];
@@ -896,132 +982,1256 @@ const Sales = () => {
     return emojis[status] || '📄';
   };
 
+  const rawInventoryData = saleStep === 2 ? JSON.parse(localStorage.getItem('inventory') || '[]') : [];
+  const availableInventory = saleStep === 2 ? rawInventoryData.filter(inv => inv.quantity > 0) : [];
+  const normalizedInventoryQuery = inventorySearchQuery.trim().toLowerCase();
+  const filteredInventory = saleStep === 2
+    ? availableInventory.filter(inv => {
+        if (!normalizedInventoryQuery) {
+          return true;
+        }
+
+        const searchableContent = [
+          inv.consoleLabel,
+          inv.console,
+          inv.colorLabel,
+          inv.color,
+          inv.assessedRank,
+          inv.productType,
+          inv.softwareName,
+          inv.managementNumbers ? inv.managementNumbers.join(' ') : '',
+          inv.serialNumber
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        return searchableContent.includes(normalizedInventoryQuery);
+      })
+    : [];
+  const totalInventoryPages = saleStep === 2
+    ? Math.max(1, Math.ceil(filteredInventory.length / ITEMS_PER_PAGE))
+    : 1;
+  const currentInventoryPage = saleStep === 2
+    ? Math.min(Math.max(inventoryPage, 1), totalInventoryPages)
+    : 1;
+  const paginatedInventory = saleStep === 2
+    ? filteredInventory.slice(
+        (currentInventoryPage - 1) * ITEMS_PER_PAGE,
+        (currentInventoryPage - 1) * ITEMS_PER_PAGE + ITEMS_PER_PAGE
+      )
+    : [];
+
+  useEffect(() => {
+    if (saleStep !== 2) {
+      if (inventorySearchQuery !== '') {
+        setInventorySearchQuery('');
+      }
+      if (inventoryPage !== 1) {
+        setInventoryPage(1);
+      }
+      return;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(filteredInventory.length / ITEMS_PER_PAGE));
+    if (inventoryPage > totalPages) {
+      setInventoryPage(totalPages);
+    } else if (inventoryPage < 1) {
+      setInventoryPage(1);
+    }
+  }, [saleStep, filteredInventory.length, inventoryPage, inventorySearchQuery]);
+
   // === 選択画面 ===
   if (viewMode === 'selection') {
-    const pendingCount = requests.filter(r => r.status !== 'shipped').length;
-    const completedCount = requests.filter(r => r.status === 'shipped').length;
-
     return (
       <div className="sales-container">
-        <h1>販売管理</h1>
-        <p className="subtitle">海外顧客からのリクエストを管理します</p>
+        <h1>🌍 海外販売管理</h1>
+        <p className="subtitle">スタッフが直接販売を作成・管理します</p>
 
         <div className="selection-screen">
           <button 
-            className="selection-btn pending-btn"
-            onClick={() => setViewMode('pending')}
+            className="selection-btn new-sale-btn"
+            onClick={handleStartNewSale}
           >
-            <div className="btn-icon">🔄</div>
-            <div className="btn-title">進行中のリクエスト</div>
-            <div className="btn-description">見積もり作成・対応中の取引</div>
-            {pendingCount > 0 && <div className="btn-count">{pendingCount}件</div>}
+            <div className="btn-icon">➕</div>
+            <div className="btn-title">新規販売作成</div>
+            <div className="btn-description">バイヤーを選択して商品を販売</div>
           </button>
 
           <button 
-            className="selection-btn completed-btn"
-            onClick={() => setViewMode('completed')}
+            className="selection-btn history-btn"
+            onClick={() => setViewMode('history')}
           >
-            <div className="btn-icon">✅</div>
-            <div className="btn-title">完了した取引</div>
-            <div className="btn-description">発送完了済みの取引履歴</div>
-            {completedCount > 0 && <div className="btn-count">{completedCount}件</div>}
+            <div className="btn-icon">📦</div>
+            <div className="btn-title">販売履歴</div>
+            <div className="btn-description">完了した販売の一覧・詳細</div>
+            {salesHistory.length > 0 && <div className="btn-count">{salesHistory.length}件</div>}
           </button>
         </div>
       </div>
     );
   }
 
-  // === 一覧画面（進行中） ===
-  if (viewMode === 'pending') {
-    const filteredRequests = getFilteredRequests();
-
-    return (
-      <div className="sales-container">
-        <div className="list-header">
-          <h1>🔄 進行中のリクエスト</h1>
-          <button className="back-btn" onClick={() => setViewMode('selection')}>
-            ← 戻る
-          </button>
-        </div>
-
-        {filteredRequests.length === 0 ? (
-          <div className="empty-state">
-            <p>進行中のリクエストはありません</p>
+  // === 新規販売作成画面 ===
+  if (viewMode === 'new-sale') {
+    // ステップ1: バイヤー選択
+    if (saleStep === 1) {
+      return (
+        <div className="sales-container">
+          <div className="list-header">
+            <h1>🌍 新規販売作成 - ステップ1: バイヤー選択</h1>
+            <button className="back-btn" onClick={handleCancelNewSale}>
+              ← キャンセル
+            </button>
           </div>
-        ) : (
-          <div className="request-list">
-            {filteredRequests.map((req, index) => {
-              return (
-                <div 
-                  key={req.requestNumber} 
-                  className="request-card"
-                  onClick={() => handleCardClick(req.requestNumber, 'pending')}
+          
+          <div className="step-indicator">
+            <div className={`step ${saleStep >= 1 ? (saleStep === 1 ? 'active' : 'completed') : ''}`}>1. バイヤー選択</div>
+            <div className={`step-connector ${saleStep >= 2 ? 'completed' : ''}`}></div>
+            <div className={`step ${saleStep >= 2 ? (saleStep === 2 ? 'active' : 'completed') : ''}`}>2. 商品選択</div>
+            <div className={`step-connector ${saleStep >= 3 ? 'completed' : ''}`}></div>
+            <div className={`step ${saleStep >= 3 ? (saleStep === 3 ? 'active' : 'completed') : ''}`}>3. 価格設定</div>
+            <div className={`step-connector ${saleStep >= 4 ? 'completed' : ''}`}></div>
+            <div className={`step ${saleStep >= 4 ? (saleStep === 4 ? 'active' : 'completed') : ''}`}>4. 発送情報</div>
+            <div className={`step-connector ${saleStep >= 5 ? 'completed' : ''}`}></div>
+            <div className={`step ${saleStep >= 5 ? (saleStep === 5 ? 'active' : 'completed') : ''}`}>5. 確認</div>
+          </div>
+
+          <div className="buyer-selection-section">
+            {selectedBuyer ? (
+              <div className="selected-buyer-card">
+                <h3>選択中のバイヤー</h3>
+                <div className="buyer-info">
+                  <div><strong>名前:</strong> {selectedBuyer.name}</div>
+                  {selectedBuyer.companyName && <div><strong>会社名:</strong> {selectedBuyer.companyName}</div>}
+                  <div><strong>国:</strong> {selectedBuyer.country}</div>
+                  <div><strong>メール:</strong> {selectedBuyer.email}</div>
+                  {selectedBuyer.phone && <div><strong>電話:</strong> {selectedBuyer.phone}</div>}
+                </div>
+                <div className="button-group">
+                  <button className="btn-secondary" onClick={() => setSelectedBuyer(null)}>
+                    変更
+                  </button>
+                  <button className="btn-primary" onClick={() => setSaleStep(2)}>
+                    次へ →
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="buyer-selector-section">
+                <button className="btn-select-buyer" onClick={() => setShowBuyerSelector(true)}>
+                  🌍 バイヤーを選択
+                </button>
+              </div>
+            )}
+          </div>
+
+          {showBuyerSelector && (
+            <BuyerSelector
+              selectedBuyer={selectedBuyer}
+              onSelectBuyer={(buyer) => {
+                setSelectedBuyer(buyer);
+                setShowBuyerSelector(false);
+              }}
+              onClose={() => setShowBuyerSelector(false)}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // ステップ2: 商品選択
+    if (saleStep === 2) {
+      // 選択された在庫の合計数量を計算
+      const totalSelectedQuantity = Object.values(selectedInventories).reduce((sum, qty) => sum + qty, 0);
+      const paginationRange = createPaginationRange(currentInventoryPage, totalInventoryPages);
+      const startIndex = filteredInventory.length === 0 ? 0 : (currentInventoryPage - 1) * ITEMS_PER_PAGE + 1;
+      const endIndex = startIndex === 0 ? 0 : Math.min(startIndex + paginatedInventory.length - 1, filteredInventory.length);
+      
+      return (
+        <div className="sales-container">
+          <div className="list-header">
+            <h1>🌍 新規販売作成 - ステップ2: 商品選択</h1>
+            <button className="back-btn" onClick={() => setSaleStep(1)}>
+              ← 戻る
+            </button>
+          </div>
+          
+          <div className="step-indicator">
+            <div className="step completed">1. バイヤー選択</div>
+            <div className="step active">2. 商品選択</div>
+            <div className="step">3. 価格設定</div>
+            <div className="step">4. 発送情報</div>
+            <div className="step">5. 確認</div>
+          </div>
+
+          <div className="selected-buyer-info">
+            <h3>選択中のバイヤー: {selectedBuyer?.name}</h3>
+          </div>
+
+          <div className="inventory-selection-section">
+            <div className="selection-summary">
+              <p>選択中の商品: {Object.keys(selectedInventories).length}種類、合計 {totalSelectedQuantity}点</p>
+              <p>
+                表示範囲: {startIndex === 0 ? 0 : `${startIndex} - ${endIndex}`} / {filteredInventory.length}件
+                （全在庫 {availableInventory.length}件）
+              </p>
+            </div>
+
+            <div className="inventory-search-bar">
+              <input
+                type="text"
+                placeholder="商品名・カラー・型番などで検索"
+                value={inventorySearchQuery}
+                onChange={(e) => {
+                  setInventorySearchQuery(e.target.value);
+                  setInventoryPage(1);
+                }}
+              />
+              {inventorySearchQuery && (
+                <button
+                  type="button"
+                  className="clear-search-btn"
+                  onClick={() => {
+                    setInventorySearchQuery('');
+                    setInventoryPage(1);
+                  }}
                 >
-                  <div className="card-header-row">
-                    <div className="card-req-number">リクエスト番号: {req.requestNumber}</div>
-                    <div className="card-status">
-                      {getStatusEmoji(req.status)} {getStatusLabel(req.status)}
+                  クリア
+                </button>
+              )}
+            </div>
+
+            <div className="inventory-list">
+              <h3>在庫一覧（{filteredInventory.length}件）</h3>
+              {filteredInventory.length === 0 ? (
+                <div className="inventory-empty">該当する在庫がありません</div>
+              ) : (
+                <>
+                  <table className="inventory-selection-table">
+                    <thead>
+                      <tr>
+                        <th>選択</th>
+                        <th>商品名</th>
+                        <th>カラー</th>
+                        <th>ランク</th>
+                        <th>参考価格<br/>(Zaico買取価格)</th>
+                        <th>在庫数</th>
+                        <th>選択数量</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedInventory.map(inv => {
+                        const selectedQty = selectedInventories[inv.id] || 0;
+                        const buybackPrice = inv.buybackPrice || inv.acquisitionPrice || 0;
+                        const buybackPriceUSD = buybackPrice > 0 ? convertJPYToUSD(buybackPrice) : 0;
+                        return (
+                          <tr key={inv.id}>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={selectedQty > 0}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    handleSelectInventoryItem(inv.id, 1);
+                                  } else {
+                                    handleSelectInventoryItem(inv.id, 0);
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td>
+                              {inv.productType === 'software' 
+                                ? `${inv.softwareName || ''} (${inv.consoleLabel || ''})`
+                                : inv.consoleLabel || ''}
+                            </td>
+                            <td>{inv.colorLabel || '-'}</td>
+                            <td>
+                              <span className={`rank-badge rank-${(inv.assessedRank || 'A').toLowerCase()}`}>
+                                {inv.assessedRank || 'A'}
+                              </span>
+                            </td>
+                            <td className="reference-price-cell">
+                              {buybackPrice > 0 ? (
+                                <div>
+                                  <div style={{ fontWeight: '600', color: '#2c3e50' }}>
+                                    ¥{buybackPrice.toLocaleString()}
+                                  </div>
+                                  <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '2px' }}>
+                                    (約 ${buybackPriceUSD.toFixed(2)})
+                                  </div>
+                                </div>
+                              ) : (
+                                <span style={{ color: '#95a5a6', fontSize: '13px' }}>-</span>
+                              )}
+                            </td>
+                            <td>{inv.quantity}</td>
+                            <td>
+                              {selectedQty > 0 && (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={inv.quantity}
+                                  value={selectedQty}
+                              onWheel={(e) => e.currentTarget.blur()}
+                                  onChange={(e) => {
+                                    const newQty = parseInt(e.target.value, 10) || 0;
+                                    if (newQty <= inv.quantity) {
+                                      handleSelectInventoryItem(inv.id, newQty);
+                                    }
+                                  }}
+                                  style={{ width: '60px' }}
+                                />
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  <div className="inventory-pagination">
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={() => setInventoryPage(1)}
+                      disabled={currentInventoryPage === 1}
+                    >
+                      «
+                    </button>
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={() => setInventoryPage(Math.max(currentInventoryPage - 1, 1))}
+                      disabled={currentInventoryPage === 1}
+                    >
+                      ‹
+                    </button>
+                    {paginationRange.map((item, idx) => {
+                      if (item === 'left-ellipsis' || item === 'right-ellipsis') {
+                        return (
+                          <span key={`${item}-${idx}`} className="page-ellipsis">…</span>
+                        );
+                      }
+
+                      return (
+                        <button
+                          type="button"
+                          key={item}
+                          className={`page-btn ${item === currentInventoryPage ? 'active' : ''}`}
+                          onClick={() => setInventoryPage(item)}
+                        >
+                          {item}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={() => setInventoryPage(Math.min(currentInventoryPage + 1, totalInventoryPages))}
+                      disabled={currentInventoryPage === totalInventoryPages}
+                    >
+                      ›
+                    </button>
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={() => setInventoryPage(totalInventoryPages)}
+                      disabled={currentInventoryPage === totalInventoryPages}
+                    >
+                      »
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="button-group" style={{ marginTop: '20px' }}>
+              <button className="btn-secondary" onClick={() => setSaleStep(1)}>
+                ← 戻る
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={() => {
+                  if (totalSelectedQuantity === 0) {
+                    alert('少なくとも1つ以上の商品を選択してください');
+                    return;
+                  }
+                  setSaleStep(3);
+                }}
+                disabled={totalSelectedQuantity === 0}
+              >
+                次へ →
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ステップ3: 価格設定（USD建て）
+    if (saleStep === 3) {
+      const inventoryData = JSON.parse(localStorage.getItem('inventory') || '[]');
+      const selectedInventoryItems = buildSelectedInventoryItems(inventoryData);
+
+      // 合計金額を計算
+      const totalUSD = selectedInventoryItems.reduce((sum, item) => {
+        return sum + (item.priceUSD * item.selectedQuantity);
+      }, 0);
+      const totalSalesJPY = convertUSDToJPY(totalUSD);
+      const totalAcquisitionJPY = selectedInventoryItems.reduce((sum, item) => {
+        const acquisitionPrice = item.acquisitionPrice || item.buybackPrice || 0;
+        return sum + (acquisitionPrice * item.selectedQuantity);
+      }, 0);
+      const totalProfitJPY = totalSalesJPY - totalAcquisitionJPY;
+      const profitMargin = totalSalesJPY > 0 ? Math.round((totalProfitJPY / totalSalesJPY) * 1000) / 10 : 0;
+      const hasPricing = selectedInventoryItems.some(item => item.priceUSD > 0);
+      const profitBreakdown = selectedInventoryItems.map(item => {
+        const unitSaleUSD = item.priceUSD || 0;
+        const saleUSD = unitSaleUSD * item.selectedQuantity;
+        const saleJPY = convertUSDToJPY(saleUSD);
+        const acquisitionPrice = item.acquisitionPrice || item.buybackPrice || 0;
+        const acquisitionJPY = acquisitionPrice * item.selectedQuantity;
+        const profitJPY = saleJPY - acquisitionJPY;
+
+        return {
+          id: item.id,
+          name: item.productType === 'software'
+            ? `${item.softwareName || ''} (${item.consoleLabel || ''})`
+            : item.consoleLabel || '',
+          rank: item.assessedRank || 'A',
+          quantity: item.selectedQuantity,
+          saleUSD,
+          saleJPY,
+          acquisitionJPY,
+          profitJPY,
+          unitSaleUSD
+        };
+      });
+
+      return (
+        <div className="sales-container">
+          <div className="list-header">
+            <h1>🌍 新規販売作成 - ステップ3: 価格設定</h1>
+            <button className="back-btn" onClick={() => setSaleStep(2)}>
+              ← 戻る
+            </button>
+          </div>
+          
+          <div className="step-indicator">
+            <div className="step completed">1. バイヤー選択</div>
+            <div className="step completed">2. 商品選択</div>
+            <div className="step active">3. 価格設定</div>
+            <div className="step">4. 発送情報</div>
+            <div className="step">5. 確認</div>
+          </div>
+
+          <div className="price-setting-section">
+            <div className="info-box">
+              <p>💡 価格はUSD（米ドル）で入力してください。為替レート: $1 = ¥{EXCHANGE_RATE}</p>
+            </div>
+
+            <table className="price-setting-table">
+              <thead>
+                <tr>
+                  <th>商品名</th>
+                  <th>カラー</th>
+                  <th>ランク</th>
+                  <th>数量</th>
+                  <th>参考価格<br/>(Zaico買取価格)</th>
+                  <th>販売単価（USD）</th>
+                  <th>小計（USD）</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedInventoryItems.map(item => {
+                  const subtotal = item.priceUSD * item.selectedQuantity;
+                  const buybackPrice = item.buybackPrice || item.acquisitionPrice || 0;
+                  const buybackPriceUSD = buybackPrice > 0 ? convertJPYToUSD(buybackPrice) : 0;
+                  return (
+                    <tr key={item.id}>
+                      <td>
+                        {item.productType === 'software' 
+                          ? `${item.softwareName || ''} (${item.consoleLabel || ''})`
+                          : item.consoleLabel || ''}
+                      </td>
+                      <td>{item.colorLabel || '-'}</td>
+                      <td>
+                        <span className={`rank-badge rank-${(item.assessedRank || 'A').toLowerCase()}`}>
+                          {item.assessedRank || 'A'}
+                        </span>
+                      </td>
+                      <td>{item.selectedQuantity}</td>
+                      <td className="reference-price-cell">
+                        {buybackPrice > 0 ? (
+                          <div>
+                            <div style={{ fontWeight: '600', color: '#2c3e50', fontSize: '14px' }}>
+                              ¥{buybackPrice.toLocaleString()}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '2px' }}>
+                              (約 ${buybackPriceUSD.toFixed(2)})
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#95a5a6', marginTop: '4px', fontStyle: 'italic' }}>
+                              参考価格
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#95a5a6', fontSize: '13px' }}>-</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="price-input-wrapper">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.priceUSD || ''}
+                            onChange={(e) => {
+                              const price = parseFloat(e.target.value) || 0;
+                              setItemPricesUSD(prev => ({
+                                ...prev,
+                                [item.id]: price
+                              }));
+                            }}
+                            style={{ width: '100px' }}
+                            placeholder={buybackPriceUSD > 0 ? `例: ${buybackPriceUSD.toFixed(2)}` : ''}
+                          />
+                          {item.priceUSD > 0 && (
+                            <div className="price-conversion-hint">
+                              ≈ ¥{convertUSDToJPY(item.priceUSD).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div>
+                          <div style={{ fontWeight: '600' }}>${subtotal.toFixed(2)}</div>
+                          {item.priceUSD > 0 && (
+                            <div className="price-conversion-hint" style={{ marginTop: '2px' }}>
+                              ≈ ¥{convertUSDToJPY(subtotal).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'right', fontWeight: 'bold' }}>合計（USD）:</td>
+                  <td style={{ fontWeight: 'bold' }}>
+                    <div>
+                      <div>${totalUSD.toFixed(2)}</div>
+                      {totalUSD > 0 && (
+                        <div className="price-conversion-hint" style={{ marginTop: '4px', fontSize: '13px' }}>
+                          ≈ ¥{convertUSDToJPY(totalUSD).toLocaleString()}
+                        </div>
+                      )}
                     </div>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+
+            {hasPricing && (
+              <div className="profit-estimate-section">
+                <h2>💹 粗利益試算（送料はこの時点では未計上）</h2>
+                <div className="profit-estimate-grid">
+                  <div className="profit-estimate-card">
+                    <span className="label">販売合計</span>
+                    <span className="value">¥{totalSalesJPY.toLocaleString()}</span>
+                    <small>${totalUSD.toFixed(2)}</small>
                   </div>
-                  <div className="card-customer">
-                    👤 {req.customer.name} ({req.customer.country || 'Japan'})
+                  <div className="profit-estimate-card">
+                    <span className="label">仕入原価合計</span>
+                    <span className="value cost">¥{totalAcquisitionJPY.toLocaleString()}</span>
                   </div>
-                  <div className="card-items">
-                    📦 {req.items.length}商品・合計{req.items.reduce((sum, i) => sum + i.quantity, 0)}点
-                  </div>
-                  <div className="card-date">
-                    📅 {new Date(req.date).toLocaleDateString('ja-JP')}
+                  <div className={`profit-estimate-card ${totalProfitJPY >= 0 ? 'positive' : 'negative'}`}>
+                    <span className="label">推定粗利益</span>
+                    <span className="value">¥{totalProfitJPY.toLocaleString()}</span>
+                    <small>利益率 {profitMargin.toFixed(1)}%</small>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  }
 
-  // === 一覧画面（完了） ===
-  if (viewMode === 'completed') {
-    const filteredRequests = getFilteredRequests();
+                <table className="profit-breakdown-table">
+                  <thead>
+                    <tr>
+                      <th>商品</th>
+                      <th>数量</th>
+                      <th>販売額 (USD / JPY)</th>
+                      <th>仕入原価 (JPY)</th>
+                      <th>粗利益 (JPY)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {profitBreakdown.map(item => (
+                      <tr key={item.id}>
+                        <td>
+                          <div className="profit-item-name">
+                            <span>{item.name}</span>
+                            <small>ランク: {item.rank}</small>
+                          </div>
+                        </td>
+                        <td>{item.quantity}</td>
+                        <td>
+                          <div className="profit-cell">
+                            <span>${item.saleUSD.toFixed(2)}</span>
+                            <small>¥{item.saleJPY.toLocaleString()}</small>
+                          </div>
+                        </td>
+                        <td>¥{item.acquisitionJPY.toLocaleString()}</td>
+                        <td className={item.profitJPY >= 0 ? 'profit-positive' : 'profit-negative'}>
+                          ¥{item.profitJPY.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="button-group" style={{ marginTop: '20px' }}>
+              <button className="btn-secondary" onClick={() => setSaleStep(2)}>
+                ← 戻る
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={() => {
+                  // 全ての商品に価格が設定されているかチェック
+                  const allPriced = selectedInventoryItems.every(item => item.priceUSD > 0);
+                  if (!allPriced) {
+                    alert('全ての商品に価格を入力してください');
+                    return;
+                  }
+                  setSaleStep(4);
+                }}
+                disabled={totalUSD === 0}
+              >
+                次へ →
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ステップ4: 発送情報
+    if (saleStep === 4) {
+      return (
+        <div className="sales-container">
+          <div className="list-header">
+            <h1>🌍 新規販売作成 - ステップ4: 発送情報</h1>
+            <button className="back-btn" onClick={() => setSaleStep(3)}>
+              ← 戻る
+            </button>
+          </div>
+          
+          <div className="step-indicator">
+            <div className="step completed">1. バイヤー選択</div>
+            <div className="step completed">2. 商品選択</div>
+            <div className="step completed">3. 価格設定</div>
+            <div className="step active">4. 発送情報</div>
+            <div className="step">5. 確認</div>
+          </div>
+
+          <div className="shipping-info-section">
+            <div className="shipping-info-row three-column">
+              <div className="form-group">
+                <label>発送方法 *</label>
+                <select
+                  value={shippingMethod}
+                  onChange={(e) => setShippingMethod(e.target.value)}
+                >
+                  <option value="EMS">EMS</option>
+                  <option value="DHL">DHL</option>
+                  <option value="FedEx">FedEx</option>
+                  <option value="その他">その他</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>送料（USD） *</label>
+                <div className="price-input-wrapper">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={shippingFeeUSD || ''}
+                    onChange={(e) => setShippingFeeUSD(parseFloat(e.target.value) || 0)}
+                  />
+                  {shippingFeeUSD > 0 && (
+                    <div className="price-conversion-hint" style={{ marginTop: '6px' }}>
+                      ≈ ¥{convertUSDToJPY(shippingFeeUSD).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>配送日数（任意）</label>
+                <input
+                  type="text"
+                  value={deliveryDays}
+                  onChange={(e) => setDeliveryDays(e.target.value)}
+                  placeholder="例: 7-14日"
+                />
+              </div>
+            </div>
+
+            <div className="shipping-info-row two-column">
+              <div className="form-group">
+                <label>発送日 *</label>
+                <input
+                  type="date"
+                  value={shippedDate}
+                  onChange={(e) => setShippedDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>追跡番号（任意）</label>
+                <input
+                  type="text"
+                  value={trackingNumber}
+                  onChange={(e) => setTrackingNumber(e.target.value)}
+                  placeholder="例: EE123456789JP"
+                />
+              </div>
+            </div>
+
+            <div className="shipping-info-row two-column">
+              <div className="form-group">
+                <label>販売担当者 *</label>
+                <select
+                  value={salesStaffName}
+                  onChange={(e) => setSalesStaffName(e.target.value)}
+                  required
+                >
+                  <option value="">選択してください</option>
+                  {staffMembers.map(staff => (
+                    <option key={staff} value={staff}>{staff}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group notes-group">
+                <label>備考（任意）</label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows="3"
+                  placeholder="特記事項があれば入力してください"
+                />
+              </div>
+            </div>
+
+            <div className="button-group" style={{ marginTop: '20px' }}>
+              <button className="btn-secondary" onClick={() => setSaleStep(3)}>
+                ← 戻る
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={() => {
+                  if (!shippingMethod || shippingFeeUSD <= 0 || !shippedDate || !salesStaffName) {
+                    alert('必須項目（発送方法、送料、発送日、販売担当者）を入力してください');
+                    return;
+                  }
+                  setSaleStep(5);
+                }}
+              >
+                次へ →
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ステップ5: 確認・完了
+    if (saleStep === 5) {
+      const inventoryData = JSON.parse(localStorage.getItem('inventory') || '[]');
+      const selectedInventoryItems = buildSelectedInventoryItems(inventoryData);
+
+      const subtotalUSD = selectedInventoryItems.reduce((sum, item) => {
+        return sum + (item.priceUSD * item.selectedQuantity);
+      }, 0);
+      const totalUSD = subtotalUSD + shippingFeeUSD;
+
+      // 販売を完了する関数
+      const handleCompleteSale = async () => {
+        const confirmAction = window.confirm('販売を確定しますか？\n在庫が減算され、販売履歴に記録されます。\nこの操作は取り消せません。');
+        if (!confirmAction) return;
+
+        const safeParseArray = (key) => {
+          try {
+            return JSON.parse(localStorage.getItem(key) || '[]');
+          } catch (error) {
+            console.error(`${key} の読み込みに失敗しました:`, error);
+            return [];
+          }
+        };
+
+        const processSale = async () => {
+          const inventoryData = safeParseArray('inventory');
+          const salesHistory = safeParseArray('salesHistory');
+          const salesLedger = safeParseArray('salesLedger');
+
+          const saleId = `SALE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const shippingFeeJPY = convertUSDToJPY(shippingFeeUSD);
+          const saleRecord = {
+            id: saleId,
+            type: 'sales',
+            soldDate: new Date().toISOString(),
+            buyer: selectedBuyer,
+            customer: selectedBuyer,
+            items: [],
+            salesChannel: 'overseas',
+            shippingMethod: shippingMethod,
+            shippingFeeUSD: shippingFeeUSD,
+            shippingFeeJPY: shippingFeeJPY,
+            deliveryDays: deliveryDays,
+            shippedDate: shippedDate,
+            trackingNumber: trackingNumber,
+            salesStaffName: salesStaffName,
+            notes: notes,
+            summary: {
+              totalAcquisitionCost: 0,
+              totalSalesAmount: 0,
+              totalSalesAmountUSD: 0,
+              totalSalesAmountJPY: 0,
+              totalProfit: 0,
+              shippingFeeUSD: shippingFeeUSD,
+              shippingFeeJPY: shippingFeeJPY
+            }
+          };
+
+          const totalUnitsSelected = selectedInventoryItems.reduce((sum, product) => sum + (product.selectedQuantity || 0), 0) || 1;
+          const shippingSharePerUnitUSD = shippingFeeUSD > 0 ? shippingFeeUSD / totalUnitsSelected : 0;
+          const shippingSharePerUnitJPY = shippingSharePerUnitUSD > 0 ? convertUSDToJPY(shippingSharePerUnitUSD) : 0;
+
+          for (const item of selectedInventoryItems) {
+            const invIndex = inventoryData.findIndex(inv => inv.id === item.id);
+            if (invIndex === -1) continue;
+
+            const inv = inventoryData[invIndex];
+            const acquisitionPrice = inv.acquisitionPrice || inv.buybackPrice || 0;
+            const totalAcquisitionCost = acquisitionPrice * item.selectedQuantity;
+            const salesPriceUSD = item.priceUSD;
+            const salesPriceJPY = convertUSDToJPY(salesPriceUSD);
+            const totalSalesAmountJPY = salesPriceJPY * item.selectedQuantity;
+            const totalSalesAmountUSD = salesPriceUSD * item.selectedQuantity;
+            const totalProfit = totalSalesAmountJPY - totalAcquisitionCost;
+
+            saleRecord.items.push({
+              inventoryId: inv.id,
+              product: item.productType === 'software' 
+                ? `${item.softwareName || ''} (${item.consoleLabel || ''})` 
+                : `${item.consoleLabel || ''}${item.colorLabel ? ' - ' + item.colorLabel : ''}`,
+              rank: inv.assessedRank,
+              quantity: item.selectedQuantity,
+              acquisitionPrice: acquisitionPrice,
+              totalAcquisitionCost: totalAcquisitionCost,
+              salesPriceUSD: salesPriceUSD,
+              salesPriceJPY: salesPriceJPY,
+              salesPrice: salesPriceJPY,
+              totalSalesAmountUSD: totalSalesAmountUSD,
+              totalSalesAmountJPY: totalSalesAmountJPY,
+              totalSalesAmount: totalSalesAmountJPY,
+              profit: salesPriceJPY - acquisitionPrice,
+              totalProfit: totalProfit,
+              source: inv.sourceType === 'customer' 
+                ? { type: 'customer', name: inv.customer?.name || '不明', applicationNumber: inv.applicationNumber }
+                : { type: 'supplier', name: inv.supplier?.name || '不明', invoiceNumber: inv.supplier?.invoiceNumber || '' }
+            });
+
+            saleRecord.summary.totalAcquisitionCost += totalAcquisitionCost;
+            saleRecord.summary.totalSalesAmount += totalSalesAmountJPY;
+            saleRecord.summary.totalSalesAmountUSD += totalSalesAmountUSD;
+            saleRecord.summary.totalProfit += totalProfit;
+
+            salesHistory.push({
+              id: `${saleId}-${item.id}`,
+              saleId: saleId,
+              inventoryItemId: inv.id,
+              productType: inv.productType,
+              manufacturer: inv.manufacturer,
+              manufacturerLabel: inv.manufacturerLabel,
+              console: inv.console,
+              consoleLabel: inv.consoleLabel,
+              color: inv.color,
+              colorLabel: inv.colorLabel,
+              softwareName: inv.softwareName,
+              assessedRank: inv.assessedRank,
+              quantity: item.selectedQuantity,
+              acquisitionPrice: acquisitionPrice,
+              soldPriceUSD: salesPriceUSD,
+              soldPrice: salesPriceJPY,
+              profit: salesPriceJPY - acquisitionPrice,
+              salesChannel: 'overseas',
+              soldTo: selectedBuyer.name,
+              buyer: selectedBuyer,
+              soldAt: new Date().toISOString(),
+              managementNumbers: (inv.managementNumbers || []).slice(0, item.selectedQuantity),
+              shippingMethod: shippingMethod,
+              shippingFeeUSD: shippingFeeUSD,
+              trackingNumber: trackingNumber,
+              salesStaffName: salesStaffName
+            });
+
+            try {
+              const zaicoSaleData = {
+                title: inv.title || inv.consoleLabel || inv.softwareName || 'ゲーム商品',
+                inventoryId: inv.id,
+                quantity: item.selectedQuantity,
+                salePrice: salesPriceJPY,
+                customerName: selectedBuyer.name,
+                buyerName: selectedBuyer.name,
+                salesChannel: '海外販売',
+                shippingCountry: selectedBuyer.country || '海外',
+                shippingFee: convertUSDToJPY(shippingFeeUSD),
+                notes: `海外販売: ${saleId} | 査定ランク: ${inv.assessedRank || ''} | 担当者: ${salesStaffName}`
+              };
+              
+              await createOutboundItemInZaico(zaicoSaleData);
+              
+              logSyncActivity('overseas_sale_create', 'success', {
+                saleId: saleId,
+                itemId: inv.id,
+                customerName: selectedBuyer.name,
+                soldPrice: salesPriceJPY,
+                quantity: item.selectedQuantity
+              });
+            } catch (error) {
+              logSyncActivity('overseas_sale_create', 'error', {
+                saleId: saleId,
+                itemId: inv.id,
+                error: error.message
+              });
+              console.error('Zaico連携エラー:', error);
+            }
+
+            const beforeQuantity = inventoryData[invIndex].quantity;
+            inventoryData[invIndex].quantity -= item.selectedQuantity;
+
+            const inventoryHistory = safeParseArray('inventoryHistory');
+            inventoryHistory.push({
+              itemId: inv.id,
+              type: 'sale',
+              change: -item.selectedQuantity,
+              beforeQuantity: beforeQuantity,
+              afterQuantity: inventoryData[invIndex].quantity,
+              date: new Date().toISOString(),
+              performedBy: salesStaffName,
+              reason: `海外販売（${saleId}）`,
+              relatedTransaction: {
+                type: 'overseas_sale',
+                saleId: saleId,
+                buyer: selectedBuyer.name
+              }
+            });
+            localStorage.setItem('inventoryHistory', JSON.stringify(inventoryHistory));
+
+            recordLedgerSale({
+              inventoryItem: inv,
+              saleId,
+              quantity: item.selectedQuantity,
+              priceJPY: totalSalesAmountJPY,
+              priceUSD: totalSalesAmountUSD,
+              shippingFeeJPY: shippingSharePerUnitJPY * item.selectedQuantity,
+              shippingFeeUSD: shippingSharePerUnitUSD * item.selectedQuantity,
+              eventDate: saleRecord.soldDate,
+              buyer: selectedBuyer,
+              salesChannel: 'overseas',
+              staff: salesStaffName,
+              managementNumbers: (inv.managementNumbers || []).slice(0, item.selectedQuantity),
+              notes
+            });
+          }
+
+          localStorage.setItem('salesHistory', JSON.stringify(salesHistory));
+
+          saleRecord.summary.totalSalesAmountUSD = Math.round(saleRecord.summary.totalSalesAmountUSD * 100) / 100;
+          saleRecord.summary.totalSalesAmountJPY = saleRecord.summary.totalSalesAmount;
+          saleRecord.summary.totalSalesAmount = saleRecord.summary.totalSalesAmountJPY;
+          saleRecord.summary.totalSalesAmountWithShippingUSD = saleRecord.summary.totalSalesAmountUSD + shippingFeeUSD;
+          saleRecord.summary.totalSalesAmountWithShippingJPY = saleRecord.summary.totalSalesAmountJPY + shippingFeeJPY;
+
+          const filteredInventory = inventoryData.filter(inv => inv.quantity > 0);
+          localStorage.setItem('inventory', JSON.stringify(filteredInventory));
+
+          salesLedger.push(saleRecord);
+          localStorage.setItem('salesLedger', JSON.stringify(salesLedger));
+
+          alert('販売が完了しました！');
+
+          setViewMode('selection');
+          setSaleStep(1);
+          setSelectedBuyer(null);
+          setSelectedItems([]);
+          setSelectedInventories({});
+          setItemPricesUSD({});
+          setShippingFeeUSD(0);
+          setDeliveryDays('');
+          setTrackingNumber('');
+          setSalesStaffName('');
+          setNotes('');
+
+          loadSalesHistory();
+        };
+
+        await processSale().catch(error => {
+          console.error('販売処理中にエラーが発生しました:', error);
+          alert('販売処理中にエラーが発生しました。もう一度お試しください。');
+        });
+      };
+
+      return (
+        <div className="sales-container">
+          <div className="list-header">
+            <h1>🌍 新規販売作成 - ステップ5: 確認</h1>
+            <button className="back-btn" onClick={() => setSaleStep(4)}>
+              ← 戻る
+            </button>
+          </div>
+          
+          <div className="step-indicator">
+            <div className="step completed">1. バイヤー選択</div>
+            <div className="step completed">2. 商品選択</div>
+            <div className="step completed">3. 価格設定</div>
+            <div className="step completed">4. 発送情報</div>
+            <div className="step active">5. 確認</div>
+          </div>
+
+          <div className="confirmation-section">
+            <div className="confirmation-card">
+              <h3>バイヤー情報</h3>
+              <div className="info-row">
+                <span>名前:</span>
+                <span>{selectedBuyer?.name}</span>
+              </div>
+              {selectedBuyer?.companyName && (
+                <div className="info-row">
+                  <span>会社名:</span>
+                  <span>{selectedBuyer.companyName}</span>
+                </div>
+              )}
+              <div className="info-row">
+                <span>国:</span>
+                <span>{selectedBuyer?.country}</span>
+              </div>
+              <div className="info-row">
+                <span>メール:</span>
+                <span>{selectedBuyer?.email}</span>
+              </div>
+            </div>
+
+            <div className="confirmation-card">
+              <h3>商品情報</h3>
+              <table className="confirmation-table">
+                <thead>
+                  <tr>
+                    <th>商品名</th>
+                    <th>ランク</th>
+                    <th>数量</th>
+                    <th>単価（USD）</th>
+                    <th>小計（USD）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedInventoryItems.map(item => (
+                    <tr key={item.id}>
+                      <td>
+                        {item.productType === 'software' 
+                          ? `${item.softwareName || ''} (${item.consoleLabel || ''})`
+                          : item.consoleLabel || ''}
+                      </td>
+                      <td>
+                        <span className={`rank-badge rank-${(item.assessedRank || 'A').toLowerCase()}`}>
+                          {item.assessedRank || 'A'}
+                        </span>
+                      </td>
+                      <td>{item.selectedQuantity}</td>
+                      <td>
+                        <div>
+                          <div>${item.priceUSD.toFixed(2)}</div>
+                          <div className="price-conversion-hint" style={{ marginTop: '2px', fontSize: '11px' }}>
+                            ≈ ¥{convertUSDToJPY(item.priceUSD).toLocaleString()}
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div>
+                          <div>${(item.priceUSD * item.selectedQuantity).toFixed(2)}</div>
+                          <div className="price-conversion-hint" style={{ marginTop: '2px', fontSize: '11px' }}>
+                            ≈ ¥{convertUSDToJPY(item.priceUSD * item.selectedQuantity).toLocaleString()}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan="4" style={{ textAlign: 'right', fontWeight: 'bold' }}>小計（USD）:</td>
+                    <td style={{ fontWeight: 'bold' }}>
+                      <div>
+                        <div>${subtotalUSD.toFixed(2)}</div>
+                        {subtotalUSD > 0 && (
+                          <div className="price-conversion-hint" style={{ marginTop: '4px', fontSize: '13px' }}>
+                            ≈ ¥{convertUSDToJPY(subtotalUSD).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan="4" style={{ textAlign: 'right', fontWeight: 'bold' }}>送料（USD）:</td>
+                    <td style={{ fontWeight: 'bold' }}>
+                      <div>
+                        <div>${shippingFeeUSD.toFixed(2)}</div>
+                        {shippingFeeUSD > 0 && (
+                          <div className="price-conversion-hint" style={{ marginTop: '4px', fontSize: '13px' }}>
+                            ≈ ¥{convertUSDToJPY(shippingFeeUSD).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  <tr style={{ borderTop: '2px solid #333', fontSize: '1.2em' }}>
+                    <td colSpan="4" style={{ textAlign: 'right', fontWeight: 'bold' }}>合計（USD）:</td>
+                    <td style={{ fontWeight: 'bold' }}>
+                      <div>
+                        <div>${totalUSD.toFixed(2)}</div>
+                        {totalUSD > 0 && (
+                          <div className="price-conversion-hint" style={{ marginTop: '4px', fontSize: '14px' }}>
+                            ≈ ¥{convertUSDToJPY(totalUSD).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div className="confirmation-card">
+              <h3>発送情報</h3>
+              <div className="info-row">
+                <span>発送方法:</span>
+                <span>{shippingMethod}</span>
+              </div>
+              <div className="info-row">
+                <span>送料（USD）:</span>
+                <span>
+                  <div>${shippingFeeUSD.toFixed(2)}</div>
+                  {shippingFeeUSD > 0 && (
+                    <div className="price-conversion-hint" style={{ marginTop: '2px', fontSize: '12px' }}>
+                      ≈ ¥{convertUSDToJPY(shippingFeeUSD).toLocaleString()}
+                    </div>
+                  )}
+                </span>
+              </div>
+              {deliveryDays && (
+                <div className="info-row">
+                  <span>配送日数:</span>
+                  <span>{deliveryDays}</span>
+                </div>
+              )}
+              <div className="info-row">
+                <span>発送日:</span>
+                <span>{shippedDate}</span>
+              </div>
+              {trackingNumber && (
+                <div className="info-row">
+                  <span>追跡番号:</span>
+                  <span>{trackingNumber}</span>
+                </div>
+              )}
+              <div className="info-row">
+                <span>販売担当者:</span>
+                <span>{salesStaffName}</span>
+              </div>
+              {notes && (
+                <div className="info-row">
+                  <span>備考:</span>
+                  <span>{notes}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="button-group" style={{ marginTop: '30px' }}>
+              <button className="btn-secondary" onClick={() => setSaleStep(4)}>
+                ← 戻る
+              </button>
+              <button className="btn-primary" onClick={handleCompleteSale}>
+                販売を確定
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="sales-container">
         <div className="list-header">
-          <h1>✅ 完了した取引</h1>
+          <h1>新規販売作成</h1>
+          <button className="back-btn" onClick={handleCancelNewSale}>
+            ← キャンセル
+          </button>
+        </div>
+        <p>不明なステップです...</p>
+      </div>
+    );
+  }
+
+  // === 販売履歴画面 ===
+  if (viewMode === 'history') {
+    return (
+      <div className="sales-container">
+        <div className="list-header">
+          <h1>📦 販売履歴</h1>
           <button className="back-btn" onClick={() => setViewMode('selection')}>
             ← 戻る
           </button>
         </div>
 
-        {filteredRequests.length === 0 ? (
+        {salesHistory.length === 0 ? (
           <div className="empty-state">
-            <p>完了した取引はありません</p>
+            <p>販売履歴はありません</p>
           </div>
         ) : (
           <div className="request-list">
-            {filteredRequests.map((req, index) => {
-              const total = req.items.reduce((sum, i) => sum + (i.quotedPrice || 0) * i.quantity, 0);
+            {salesHistory.map((sale) => {
+              const totalUSD = (sale.items || []).reduce((sum, item) => {
+                const priceUSD = item.soldPriceUSD || convertJPYToUSD(item.soldPrice || 0);
+                return sum + (priceUSD * item.quantity);
+              }, 0);
               return (
                 <div 
-                  key={req.requestNumber} 
+                  key={sale.id} 
                   className="request-card completed-card"
-                  onClick={() => handleCardClick(req.requestNumber, 'completed')}
+                  onClick={() => {
+                    setSelectedSaleId(sale.id);
+                    setViewMode('sale-detail');
+                  }}
                 >
                   <div className="card-header-row">
-                    <div className="card-req-number">リクエスト番号: {req.requestNumber}</div>
+                    <div className="card-req-number">販売ID: {sale.id}</div>
                   </div>
                   <div className="card-customer">
-                    👤 {req.customer.name} ({req.customer.country || 'Japan'})
+                    👤 {sale.buyer?.name || sale.soldTo || '不明'}
                   </div>
                   <div className="card-items">
-                    📦 {req.items.length}商品・合計{req.items.reduce((sum, i) => sum + i.quantity, 0)}点
+                    📦 {sale.items?.length || 0}商品
                   </div>
                   <div className="card-total">
-                    💰 合計: ${convertToUSD(total).toFixed(2)}
+                    💰 合計: ${totalUSD.toFixed(2)}
                   </div>
                   <div className="card-date">
-                    📅 {new Date(req.date).toLocaleDateString('ja-JP')}
+                    📅 {new Date(sale.soldAt || sale.date).toLocaleDateString('ja-JP')}
                   </div>
                 </div>
               );
@@ -1340,6 +2550,7 @@ const Sales = () => {
                                       min="0"
                                       max={inv.quantity}
                                       value={selectedFromThis}
+                              onWheel={(e) => e.currentTarget.blur()}
                                       onChange={(e) => handleSelectInventory(item.id, inv.id, parseInt(e.target.value) || 0, item.quantity)}
                                       className="quantity-input-compact"
                                       placeholder="0"

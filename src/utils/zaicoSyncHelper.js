@@ -10,8 +10,8 @@ export const syncExistingInventoryWithZaico = async () => {
     const projectInventory = JSON.parse(localStorage.getItem('inventory') || '[]');
     console.log('プロジェクト在庫数:', projectInventory.length);
     
-    // Zaicoの在庫データを取得
-    const zaicoInventory = await getInventoriesFromZaico();
+    // Zaicoの在庫データを取得（ページネーション対応、最大3ページ=2500件）
+    const zaicoInventory = await getInventoriesFromZaico(3);
     console.log('Zaico在庫数:', zaicoInventory.length);
     
     let syncCount = 0;
@@ -66,23 +66,70 @@ export const checkInventoryZaicoIds = () => {
 };
 
 // Zaico側の在庫データをプロジェクト側に同期
-export const syncZaicoToProject = async () => {
+export const syncZaicoToProject = async (dateRange = null) => {
   try {
     console.log('=== Zaico → プロジェクト同期開始 ===');
+    if (dateRange && dateRange.startDate && dateRange.endDate) {
+      console.log(`フィルタリング条件: 在庫数量1以上、日付範囲: ${dateRange.startDate} 〜 ${dateRange.endDate}`);
+    } else {
+      console.log('フィルタリング条件: 在庫数量1以上');
+    }
     
-    // zaicoの在庫データを取得
-    const zaicoInventory = await getInventoriesFromZaico();
-    console.log('zaico在庫数:', zaicoInventory.length);
+    // zaicoの在庫データを取得（ページネーション対応、最大3ページ=2500件）
+    const zaicoInventory = await getInventoriesFromZaico(3);
+    console.log('zaico在庫数（フィルタリング前）:', zaicoInventory.length);
+    
+    // フィルタリング: 数量0のものは除外、数量1以上のものは取り込み対象
+    let filteredZaicoInventory = zaicoInventory.filter(zaicoItem => {
+      const quantity = parseInt(zaicoItem.quantity) || 0;
+      
+      // 数量0のものは除外
+      if (quantity === 0) {
+        console.log(`数量0のため除外: ${zaicoItem.title} (zaicoId: ${zaicoItem.id})`);
+        return false;
+      }
+      
+      // 数量1以上のものは取り込み対象
+      console.log(`✓ 取り込み対象: ${zaicoItem.title} (zaicoId: ${zaicoItem.id}, 数量: ${quantity})`);
+      return true;
+    });
+    
+    // 日付範囲が指定されている場合は、日付でフィルタリング
+    if (dateRange && dateRange.startDate && dateRange.endDate) {
+      const startDate = new Date(dateRange.startDate);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(dateRange.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      
+      const beforeDateFilter = filteredZaicoInventory.length;
+      filteredZaicoInventory = filteredZaicoInventory.filter(zaicoItem => {
+        // created_atまたはupdated_atでフィルタリング
+        const itemDate = new Date(zaicoItem.created_at || zaicoItem.updated_at);
+        
+        if (itemDate >= startDate && itemDate <= endDate) {
+          console.log(`✓ 日付範囲内: ${zaicoItem.title} (日付: ${itemDate.toLocaleDateString('ja-JP')})`);
+          return true;
+        } else {
+          console.log(`× 日付範囲外: ${zaicoItem.title} (日付: ${itemDate.toLocaleDateString('ja-JP')})`);
+          return false;
+        }
+      });
+      
+      console.log(`日付フィルタリング: ${beforeDateFilter}件 → ${filteredZaicoInventory.length}件`);
+    }
+    
+    console.log('zaico在庫数（フィルタリング後）:', filteredZaicoInventory.length);
     
     // プロジェクトの既存在庫データを取得
     const existingProjectInventory = JSON.parse(localStorage.getItem('inventory') || '[]');
     console.log('プロジェクト既存在庫数:', existingProjectInventory.length);
     
     let syncCount = 0;
+    let skippedCount = 0;
     const newProjectInventory = [...existingProjectInventory];
     
-    // zaicoの在庫データをループ
-    for (const zaicoItem of zaicoInventory) {
+    // フィルタリングされたzaicoの在庫データをループ
+    for (const zaicoItem of filteredZaicoInventory) {
       // 既にプロジェクト側に存在するかチェック
       const existingItem = newProjectInventory.find(projectItem => 
         projectItem.zaicoId === zaicoItem.id
@@ -90,28 +137,20 @@ export const syncZaicoToProject = async () => {
       
       if (existingItem) {
         console.log(`既に存在: ${zaicoItem.title} (zaicoId: ${zaicoItem.id})`);
+        skippedCount++;
         continue;
       }
       
       // Zaicoの仕入単価を取得（optional_attributesから）
       let zaicoPurchasePrice = 0;
-      console.log(`=== ${zaicoItem.title} の仕入単価取得 ===`);
-      console.log('optional_attributes:', zaicoItem.optional_attributes);
-      
       if (zaicoItem.optional_attributes && Array.isArray(zaicoItem.optional_attributes)) {
         const priceAttribute = zaicoItem.optional_attributes.find(attr => 
           attr.name === '仕入単価' || attr.name === 'purchase_price' || attr.name === '仕入価格'
         );
-        console.log('priceAttribute:', priceAttribute);
         
         if (priceAttribute && priceAttribute.value) {
           zaicoPurchasePrice = parseFloat(priceAttribute.value) || 0;
-          console.log(`仕入単価を取得: ¥${zaicoPurchasePrice.toLocaleString()}`);
-        } else {
-          console.log('仕入単価の属性が見つかりません');
         }
-      } else {
-        console.log('optional_attributesが存在しません');
       }
       
       // プロジェクト形式の在庫データを作成
@@ -128,14 +167,13 @@ export const syncZaicoToProject = async () => {
         manufacturer: zaicoItem.manufacturer || '不明',
         condition: zaicoItem.state || 'S',
         location: zaicoItem.place || 'ZAICO倉庫',
-        assessedRank: '未評価', // デフォルト値を設定
-        status: 'in_stock', // デフォルトステータス
-        buybackPrice: zaicoPurchasePrice, // Zaicoの仕入単価を買取単価に反映
-        acquisitionPrice: zaicoPurchasePrice, // 仕入価格も同じ値に設定
-        registeredDate: new Date().toISOString(), // 登録日
-        zaicoOriginalDate: zaicoItem.created_at || zaicoItem.updated_at, // Zaicoでの元の登録日
-        colorLabel: '', // 色ラベル
-        // Zaico同期商品の管理番号を設定
+        assessedRank: '未評価',
+        status: 'in_stock',
+        buybackPrice: zaicoPurchasePrice,
+        acquisitionPrice: zaicoPurchasePrice,
+        registeredDate: new Date().toISOString(),
+        zaicoOriginalDate: zaicoItem.created_at || zaicoItem.updated_at,
+        colorLabel: '',
         managementNumbers: [`ZAICO-${zaicoItem.id}`],
         notes: `Zaicoから同期: ${zaicoItem.memo || ''}${zaicoPurchasePrice > 0 ? ` | 仕入単価: ¥${zaicoPurchasePrice.toLocaleString()}` : ''}`,
         createdAt: new Date().toISOString()
@@ -143,11 +181,11 @@ export const syncZaicoToProject = async () => {
       
       newProjectInventory.push(projectItem);
       syncCount++;
-      console.log(`新規追加: ${zaicoItem.title} (zaicoId: ${zaicoItem.id})${zaicoPurchasePrice > 0 ? ` | 仕入単価: ¥${zaicoPurchasePrice.toLocaleString()}` : ' | 仕入単価なし'}`);
+      console.log(`新規追加: ${zaicoItem.title} (zaicoId: ${zaicoItem.id}, 数量: ${projectItem.quantity})`);
     }
     
-    // Zaicoで削除された商品をプロジェクトからも削除
-    const zaicoIds = zaicoInventory.map(item => item.id);
+    // Zaicoで削除された商品をプロジェクトからも削除（フィルタリング後のリストを使用）
+    const zaicoIds = filteredZaicoInventory.map(item => item.id);
     const originalCount = newProjectInventory.length;
     
     // Zaicoに存在しない商品をフィルタリング
@@ -165,13 +203,20 @@ export const syncZaicoToProject = async () => {
     // 更新された在庫データを保存
     localStorage.setItem('inventory', JSON.stringify(filteredInventory));
     
-    console.log(`同期完了: ${syncCount}件の在庫データを追加, ${deletedCount}件の在庫データを削除`);
+    console.log(`=== 同期完了 ===`);
+    console.log(`取り込み対象: ${filteredZaicoInventory.length}件`);
+    console.log(`新規追加: ${syncCount}件`);
+    console.log(`既存スキップ: ${skippedCount}件`);
+    console.log(`削除: ${deletedCount}件`);
+    console.log(`総在庫数: ${filteredInventory.length}件`);
     
     return { 
       success: true, 
       syncCount, 
+      skippedCount,
       deletedCount,
-      totalCount: filteredInventory.length 
+      totalCount: filteredInventory.length,
+      filteredCount: filteredZaicoInventory.length
     };
     
   } catch (error) {

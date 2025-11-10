@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { manufacturers, colors, conditions } from '../data/gameConsoles';
 import { getAllConsoles } from '../utils/productMaster';
 import { searchEbaySalesRecord } from '../utils/googleSheetsApi';
+import { recordLedgerSale } from '../utils/ledgerRecords';
 import { GOOGLE_SHEETS_CONFIG } from '../config/googleSheets';
 import './Inventory.css';
 
@@ -159,12 +160,54 @@ const Inventory = () => {
   // ページ変更時の処理
   const handlePageChange = (newPage) => {
     setCurrentPage(newPage);
+    // ページ変更時にスクロールをトップに戻す
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // ページサイズ変更時の処理
   const handlePageSizeChange = (newPageSize) => {
     setPageSize(newPageSize);
     setCurrentPage(1); // ページサイズ変更時は1ページ目に戻る
+  };
+
+  // スマートページネーション: 表示するページ番号のリストを生成
+  const getPaginationPages = () => {
+    const pages = [];
+    const maxVisiblePages = 7; // 表示する最大ページ数
+    const sidePages = 2; // 現在ページの前後に表示するページ数
+
+    if (totalPages <= maxVisiblePages) {
+      // ページ数が少ない場合は全て表示
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+
+    // 常に最初のページを表示
+    pages.push(1);
+
+    let startPage = Math.max(2, currentPage - sidePages);
+    let endPage = Math.min(totalPages - 1, currentPage + sidePages);
+
+    // 前の省略記号が必要か
+    if (startPage > 2) {
+      pages.push('ellipsis-start');
+    }
+
+    // 現在ページ周辺のページを追加
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    // 後の省略記号が必要か
+    if (endPage < totalPages - 1) {
+      pages.push('ellipsis-end');
+    }
+
+    // 常に最後のページを表示
+    if (totalPages > 1) {
+      pages.push(totalPages);
+    }
+
+    return pages;
   };
 
   const handleExportData = () => {
@@ -307,6 +350,24 @@ const Inventory = () => {
           managementNumbers: soldManagementNumbers
         };
         salesHistory.push(saleRecord);
+
+        recordLedgerSale({
+          inventoryItem: item,
+          saleId: saleRecord.id,
+          quantity,
+          priceJPY: (salesFormData.soldPrice || item.buybackPrice || 0) * quantity,
+          priceUSD: 0,
+          shippingFeeJPY: salesFormData.shippingFee || 0,
+          shippingFeeUSD: 0,
+          eventDate: saleRecord.soldAt,
+          buyer: { name: salesFormData.buyerName },
+          salesChannel: salesFormData.salesChannel,
+          staff: salesFormData.performedBy || '',
+          managementNumbers: soldManagementNumbers,
+          notes: salesFormData.salesChannel === 'ebay' && salesFormData.ebayRecordNumber
+            ? `eBayレコード: ${salesFormData.ebayRecordNumber}`
+            : ''
+        });
         
         // 在庫変更履歴を記録
         inventoryHistory.push({
@@ -737,7 +798,6 @@ const Inventory = () => {
               <th>ステータス</th>
               <th>数量</th>
               <th>買取単価</th>
-              <th>評価額</th>
               <th>登録日</th>
             </tr>
           </thead>
@@ -803,7 +863,6 @@ const Inventory = () => {
                 </td>
                 <td className="quantity-cell">{item.quantity}</td>
                 <td className="price-cell">¥{item.buybackPrice.toLocaleString()}</td>
-                <td className="value-cell">¥{(item.buybackPrice * item.quantity).toLocaleString()}</td>
                 <td className="date-cell">
                   <div className="date-display">
                     {new Date(item.registeredDate).toLocaleDateString('ja-JP')}
@@ -823,7 +882,6 @@ const Inventory = () => {
               <td colSpan="7">合計</td>
               <td>{filteredInventory.reduce((sum, item) => sum + item.quantity, 0)}</td>
               <td>-</td>
-              <td>¥{filteredInventory.reduce((sum, item) => sum + (item.buybackPrice * item.quantity), 0).toLocaleString()}</td>
               <td>-</td>
             </tr>
           </tfoot>
@@ -1800,29 +1858,46 @@ const Inventory = () => {
             onClick={() => handlePageChange(currentPage - 1)} 
             disabled={currentPage === 1}
             className="pagination-btn"
+            aria-label="前のページ"
           >
             ← 前へ
           </button>
           
           <div className="pagination-numbers">
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-              <button
-                key={page}
-                onClick={() => handlePageChange(page)}
-                className={`pagination-number ${currentPage === page ? 'active' : ''}`}
-              >
-                {page}
-              </button>
-            ))}
+            {getPaginationPages().map((page, index) => {
+              if (page === 'ellipsis-start' || page === 'ellipsis-end') {
+                return (
+                  <span key={`ellipsis-${index}`} className="pagination-ellipsis">
+                    ...
+                  </span>
+                );
+              }
+              return (
+                <button
+                  key={page}
+                  onClick={() => handlePageChange(page)}
+                  className={`pagination-number ${currentPage === page ? 'active' : ''}`}
+                  aria-label={`ページ ${page}`}
+                  aria-current={currentPage === page ? 'page' : undefined}
+                >
+                  {page}
+                </button>
+              );
+            })}
           </div>
           
           <button 
             onClick={() => handlePageChange(currentPage + 1)} 
             disabled={currentPage === totalPages}
             className="pagination-btn"
+            aria-label="次のページ"
           >
             次へ →
           </button>
+          
+          <div className="pagination-info-mobile">
+            <span>{currentPage} / {totalPages}</span>
+          </div>
         </div>
       )}
     </div>

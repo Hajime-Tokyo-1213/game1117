@@ -5,9 +5,10 @@ import Layout from './components/Layout';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './components/Login';
 import CustomerLogin from './components/CustomerLogin';
-import BuyerLogin from './components/BuyerLogin';
 import StaffLogin from './components/StaffLogin';
 import Register from './components/Register';
+// 既存ユーザー用に残しておく（非推奨）
+import BuyerLogin from './components/BuyerLogin';
 import BuyerRegister from './components/BuyerRegister';
 import StaffManagement from './pages/StaffManagement';
 import ProductManagement from './pages/ProductManagement';
@@ -17,8 +18,6 @@ import Unauthorized from './pages/Unauthorized';
 import AccountSettings from './pages/AccountSettings';
 import BuybackApplication from './pages/BuybackApplication';
 import MyApplications from './pages/MyApplications';
-import SalesRequest from './pages/SalesRequest';
-import MyOrders from './pages/MyOrders';
 import Rating from './pages/Rating';
 import Sales from './pages/Sales';
 import Inventory from './pages/Inventory';
@@ -85,17 +84,12 @@ function AppContent() {
         isAuthenticated ? <Navigate to="/" replace /> : <CustomerLogin />
       } />
       
-      <Route path="/intl/portal/auth" element={
-        isAuthenticated ? <Navigate to="/" replace /> : <BuyerLogin />
-      } />
-      
       <Route path="/sys/staff/auth" element={
         isAuthenticated ? <Navigate to="/" replace /> : <StaffLogin />
       } />
       
       {/* 後方互換のためのリダイレクト */}
       <Route path="/login/customer" element={<Navigate to="/login" replace />} />
-      <Route path="/login/buyer" element={<Navigate to="/intl/portal/auth" replace />} />
       <Route path="/login/staff" element={<Navigate to="/sys/staff/auth" replace />} />
       
       {/* 登録画面 */}
@@ -103,11 +97,14 @@ function AppContent() {
         isAuthenticated ? <Navigate to="/" replace /> : <Register />
       } />
       
+      {/* 海外バイヤーのログイン・登録は非推奨だが、既存ユーザー用に残しておく */}
+      <Route path="/intl/portal/auth" element={
+        isAuthenticated ? <Navigate to="/" replace /> : <BuyerLogin />
+      } />
       <Route path="/intl/portal/register" element={
         isAuthenticated ? <Navigate to="/" replace /> : <BuyerRegister />
       } />
-      
-      {/* 後方互換 */}
+      <Route path="/login/buyer" element={<Navigate to="/intl/portal/auth" replace />} />
       <Route path="/register/buyer" element={<Navigate to="/intl/portal/register" replace />} />
       
       <Route path="/unauthorized" element={<Unauthorized />} />
@@ -179,21 +176,6 @@ function AppContent() {
         </PrivateRoute>
       } />
       
-      <Route path="/sales-request" element={
-        <PrivateRoute allowedRoles={['overseas_customer']}>
-          <Layout>
-            <SalesRequest />
-          </Layout>
-        </PrivateRoute>
-      } />
-      
-      <Route path="/my-orders" element={
-        <PrivateRoute allowedRoles={['overseas_customer']}>
-          <Layout>
-            <MyOrders />
-          </Layout>
-        </PrivateRoute>
-      } />
       
       <Route path="/rating" element={
         <PrivateRoute allowedRoles={['staff', 'admin', 'manager']}>

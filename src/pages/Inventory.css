@@ -80,17 +80,21 @@
   gap: 8px;
   margin: 20px 0;
   padding: 15px;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .pagination-btn {
-  padding: 6px 12px;
+  padding: 8px 16px;
   border: 1px solid #007bff;
   background-color: white;
   color: #007bff;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 13px;
+  font-size: 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .pagination-btn:hover:not(:disabled) {
@@ -106,27 +110,116 @@
 .pagination-numbers {
   display: flex;
   gap: 5px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 5px 0;
+  scrollbar-width: thin;
+  scrollbar-color: #007bff #f0f0f0;
+}
+
+.pagination-numbers::-webkit-scrollbar {
+  height: 6px;
+}
+
+.pagination-numbers::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.pagination-numbers::-webkit-scrollbar-thumb {
+  background: #007bff;
+  border-radius: 3px;
+}
+
+.pagination-numbers::-webkit-scrollbar-thumb:hover {
+  background: #0056b3;
 }
 
 .pagination-number {
-  padding: 6px 10px;
+  padding: 8px 12px;
+  min-width: 40px;
   border: 1px solid #dee2e6;
   background-color: white;
   color: #495057;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .pagination-number:hover {
   background-color: #e9ecef;
+  border-color: #007bff;
 }
 
 .pagination-number.active {
   background-color: #007bff;
   color: white;
   border-color: #007bff;
+  font-weight: bold;
+}
+
+.pagination-ellipsis {
+  padding: 8px 4px;
+  color: #6c757d;
+  font-size: 14px;
+  font-weight: bold;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.pagination-info-mobile {
+  display: none;
+  font-size: 14px;
+  color: #6c757d;
+  font-weight: 500;
+  margin-left: 10px;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+  .pagination {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .pagination-numbers {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .pagination-info-mobile {
+    display: block;
+  }
+
+  .pagination-btn {
+    width: 100%;
+    max-width: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  .pagination-numbers {
+    gap: 3px;
+  }
+
+  .pagination-number {
+    padding: 6px 10px;
+    min-width: 36px;
+    font-size: 13px;
+  }
+
+  .pagination-btn {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
 }
 
 /* 管理番号スタイル */

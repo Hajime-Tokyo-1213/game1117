@@ -484,15 +484,211 @@ export const updateInventoryInZaico = async (projectItem) => {
   }
 };
 
-// Zaicoから在庫データを取得
-export const getInventoriesFromZaico = async () => {
+// Linkヘッダを解析して次のページURLを取得
+const parseLinkHeader = (linkHeader) => {
+  if (!linkHeader) return null;
+  
+  const links = {};
+  linkHeader.split(',').forEach(link => {
+    const match = link.match(/<([^>]+)>;\s*rel="([^"]+)"/);
+    if (match) {
+      links[match[2]] = match[1];
+    }
+  });
+  
+  return links;
+};
+
+// ページネーション対応: Zaicoから在庫データを全ページ取得（最大2500件対応）
+export const getInventoriesFromZaico = async (maxPages = 3) => {
   try {
-    const result = await callZaicoApi('/inventories');
-    return result.data || result;
+    console.log('=== Zaico在庫データ取得開始（ページネーション対応） ===');
+    
+    const allInventories = [];
+    let currentPage = 1;
+    let hasNextPage = true;
+    let nextPageUrl = null;
+    
+    while (hasNextPage && currentPage <= maxPages) {
+      console.log(`ページ ${currentPage} を取得中...`);
+      
+      // ページURLを構築（最初のページまたは次のページURLを使用）
+      let endpoint;
+      if (nextPageUrl) {
+        // 次のページURLからエンドポイントを抽出
+        // プロキシ経由の場合、URL形式が異なる可能性があるので複数パターンを試す
+        const urlPatterns = [
+          /\/inventories\?[^"]+/, // /inventories?page=X&per_page=1000 の形式
+          /inventories\?[^"]+/,   // inventories?page=X&per_page=1000 の形式（先頭スラッシュなし）
+        ];
+        
+        let matched = false;
+        for (const pattern of urlPatterns) {
+          const match = nextPageUrl.match(pattern);
+          if (match) {
+            endpoint = match[0].startsWith('/') ? match[0] : `/${match[0]}`;
+            matched = true;
+            break;
+          }
+        }
+        
+        if (!matched) {
+          // パターンマッチに失敗した場合は、URLから直接抽出を試みる
+          try {
+            const url = new URL(nextPageUrl);
+            endpoint = url.pathname + url.search;
+          } catch (e) {
+            // URL解析に失敗した場合は、次のページを手動で構築
+            endpoint = `/inventories?page=${currentPage}&per_page=1000`;
+          }
+        }
+      } else {
+        endpoint = `/inventories?page=${currentPage}&per_page=1000`;
+      }
+      
+      console.log('取得エンドポイント:', endpoint);
+      
+      // APIを呼び出し（ヘッダー情報も取得できるように修正版を使用）
+      const result = await getInventoriesWithHeaders(endpoint);
+      
+      // データを追加
+      const inventories = result.data || result;
+      if (Array.isArray(inventories)) {
+        allInventories.push(...inventories);
+        console.log(`ページ ${currentPage}: ${inventories.length}件取得`);
+      } else if (inventories && Array.isArray(inventories.data)) {
+        allInventories.push(...inventories.data);
+        console.log(`ページ ${currentPage}: ${inventories.data.length}件取得`);
+      }
+      
+      // Linkヘッダから次のページを確認
+      const linkHeader = result.headers?.get('Link');
+      if (linkHeader) {
+        const links = parseLinkHeader(linkHeader);
+        nextPageUrl = links.next;
+        hasNextPage = !!nextPageUrl && currentPage < maxPages;
+        console.log('Linkヘッダ:', links);
+        console.log('次のページ:', nextPageUrl ? 'あり' : 'なし');
+      } else {
+        // Linkヘッダがない場合は、取得したデータ数で判定
+        const itemCount = Array.isArray(inventories) ? inventories.length : (inventories?.data?.length || 0);
+        hasNextPage = itemCount >= 1000 && currentPage < maxPages;
+        if (hasNextPage) {
+          nextPageUrl = null; // 次のページを手動で構築（endpointのページ番号を増やす）
+          console.log('Linkヘッダなし、データ数で判定: 次のページを手動構築');
+        } else {
+          hasNextPage = false;
+          console.log('Linkヘッダなし、次のページなし（データ数が1000未満）');
+        }
+      }
+      
+      currentPage++;
+      
+      // 少し待機（API負荷軽減）
+      if (hasNextPage) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+    
+    console.log(`=== 在庫データ取得完了 ===`);
+    console.log(`総取得数: ${allInventories.length}件`);
+    console.log(`取得ページ数: ${currentPage - 1}ページ`);
+    
+    return allInventories;
+    
   } catch (error) {
     console.error('zaico在庫データ取得エラー:', error);
     throw error;
   }
+};
+
+// レスポンスヘッダーも取得できるAPI呼び出し関数
+const getInventoriesWithHeaders = async (endpoint) => {
+  const apiKey = getApiKey();
+  
+  // 成功したプロキシを優先的に使用
+  const successfulProxies = JSON.parse(localStorage.getItem('zaicoSuccessfulProxies') || '[]');
+  let prioritizedProxies = [...CORS_PROXIES];
+  
+  if (successfulProxies.length > 0) {
+    const latestSuccess = successfulProxies[successfulProxies.length - 1];
+    const successfulUrl = latestSuccess.url;
+    prioritizedProxies = [successfulUrl, ...CORS_PROXIES.filter(url => url !== successfulUrl)];
+  }
+  
+  // プロキシを順番に試す
+  for (let i = 0; i < prioritizedProxies.length; i++) {
+    try {
+      const baseUrl = prioritizedProxies[i];
+      const isBackendProxy = baseUrl.startsWith('/api/');
+      
+      const url = isBackendProxy 
+        ? `${baseUrl}/${endpoint.replace(/^\//, '')}`
+        : `${baseUrl}${endpoint}`;
+      
+      const options = {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        mode: 'cors',
+        credentials: 'omit'
+      };
+      
+      if (isBackendProxy) {
+        options.headers['X-API-KEY'] = apiKey;
+      } else {
+        options.headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+
+      console.log(`=== 在庫データ取得 API呼び出し (試行 ${i + 1}) ===`);
+      console.log(`GET ${url}`);
+
+      const response = await fetch(url, options);
+      
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error(`API エラーレスポンス (試行 ${i + 1}):`, responseText);
+        
+        if (i < prioritizedProxies.length - 1) {
+          continue;
+        }
+        throw new Error(`HTTP error! status: ${response.status} - ${responseText}`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const responseText = await response.text();
+        console.error(`非JSONレスポンス (試行 ${i + 1}):`, responseText);
+        
+        if (i < prioritizedProxies.length - 1) {
+          continue;
+        }
+        throw new Error(`API レスポンスがJSON形式ではありません: ${responseText}`);
+      }
+
+      const result = await response.json();
+      
+      // レスポンスオブジェクトにヘッダー情報を付加
+      return {
+        data: result.data || result,
+        headers: response.headers,
+        meta: result.meta
+      };
+      
+    } catch (error) {
+      console.error(`在庫データ取得エラー (試行 ${i + 1}):`, error);
+      
+      if (i < prioritizedProxies.length - 1) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  
+  throw new Error('すべてのプロキシが失敗しました');
 };
 
 // 出庫データ（packing_slips）を取得

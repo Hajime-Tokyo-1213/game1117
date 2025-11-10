@@ -17,15 +17,45 @@ const ZaicoSyncManager = () => {
   // 自動同期用の状態
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   
-  // 今日の日付をデフォルトに設定
-  const getTodayString = () => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
+  // 日本時間で今日の日付を取得（YYYY-MM-DD形式）
+  const getTodayStringJST = () => {
+    const now = new Date();
+    // 日本時間に変換（UTC+9時間）
+    const jstOffset = 9 * 60 * 60 * 1000;
+    const jstTime = new Date(now.getTime() + jstOffset);
+    const year = jstTime.getUTCFullYear();
+    const month = String(jstTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(jstTime.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
   
+  // 日本時間で1ヶ月前の日付を取得（YYYY-MM-DD形式）
+  const getOneMonthAgoStringJST = () => {
+    const now = new Date();
+    // 日本時間に変換（UTC+9時間）
+    const jstOffset = 9 * 60 * 60 * 1000;
+    const jstTime = new Date(now.getTime() + jstOffset);
+    
+    // 1ヶ月前を計算
+    const oneMonthAgo = new Date(jstTime);
+    oneMonthAgo.setUTCMonth(oneMonthAgo.getUTCMonth() - 1);
+    
+    const year = oneMonthAgo.getUTCFullYear();
+    const month = String(oneMonthAgo.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(oneMonthAgo.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  // 出庫同期用の日付範囲
   const [syncDateRange, setSyncDateRange] = useState({
-    startDate: getTodayString(),
-    endDate: getTodayString()
+    startDate: getTodayStringJST(),
+    endDate: getTodayStringJST()
+  });
+  
+  // 在庫同期用の日付範囲（デフォルト: 1ヶ月前〜今日）
+  const [inventoryDateRange, setInventoryDateRange] = useState({
+    startDate: getOneMonthAgoStringJST(),
+    endDate: getTodayStringJST()
   });
 
   // ログを読み込む関数
@@ -151,7 +181,7 @@ const ZaicoSyncManager = () => {
     }
   };
 
-  // Zaico → プロジェクト同期
+  // Zaico → プロジェクト同期（全件）
   const handleSyncZaicoToProject = async () => {
     setIsLoading(true);
     setSyncStatus('Zaico → プロジェクト同期中...');
@@ -159,12 +189,14 @@ const ZaicoSyncManager = () => {
     try {
       const result = await syncZaicoToProject();
       if (result.success) {
-        const statusMessage = `Zaico → プロジェクト同期完了: ${result.syncCount}件追加, ${result.deletedCount || 0}件削除（総数: ${result.totalCount}件）`;
+        const statusMessage = `Zaico → プロジェクト同期完了: ${result.syncCount}件追加, ${result.skippedCount || 0}件スキップ, ${result.deletedCount || 0}件削除（フィルタ後: ${result.filteredCount || 0}件、総数: ${result.totalCount}件）`;
         setSyncStatus(statusMessage);
         logSyncActivity('zaico_to_project_sync', 'success', { 
-          syncCount: result.syncCount, 
+          syncCount: result.syncCount,
+          skippedCount: result.skippedCount || 0,
           deletedCount: result.deletedCount || 0,
-          totalCount: result.totalCount 
+          totalCount: result.totalCount,
+          filteredCount: result.filteredCount || 0
         });
         loadSyncLogs(); // ログを即座に更新
       } else {
@@ -175,6 +207,44 @@ const ZaicoSyncManager = () => {
     } catch (error) {
       setSyncStatus(`Zaico → プロジェクト同期エラー: ${error.message}`);
       logSyncActivity('zaico_to_project_sync', 'error', { error: error.message });
+      loadSyncLogs(); // ログを即座に更新
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Zaico → プロジェクト同期（日付範囲指定）
+  const handleSyncZaicoToProjectWithDateRange = async () => {
+    if (!inventoryDateRange.startDate || !inventoryDateRange.endDate) {
+      alert('開始日と終了日を入力してください');
+      return;
+    }
+
+    setIsLoading(true);
+    setSyncStatus(`Zaico → プロジェクト同期中（${inventoryDateRange.startDate} 〜 ${inventoryDateRange.endDate}）...`);
+    
+    try {
+      const result = await syncZaicoToProject(inventoryDateRange);
+      if (result.success) {
+        const statusMessage = `Zaico → プロジェクト同期完了（日付範囲: ${inventoryDateRange.startDate} 〜 ${inventoryDateRange.endDate}）: ${result.syncCount}件追加, ${result.skippedCount || 0}件スキップ, ${result.deletedCount || 0}件削除（フィルタ後: ${result.filteredCount || 0}件、総数: ${result.totalCount}件）`;
+        setSyncStatus(statusMessage);
+        logSyncActivity('zaico_to_project_sync_daterange', 'success', { 
+          syncCount: result.syncCount,
+          skippedCount: result.skippedCount || 0,
+          deletedCount: result.deletedCount || 0,
+          totalCount: result.totalCount,
+          filteredCount: result.filteredCount || 0,
+          dateRange: `${inventoryDateRange.startDate} 〜 ${inventoryDateRange.endDate}`
+        });
+        loadSyncLogs(); // ログを即座に更新
+      } else {
+        setSyncStatus(`Zaico → プロジェクト同期エラー: ${result.error}`);
+        logSyncActivity('zaico_to_project_sync_daterange', 'error', { error: result.error });
+        loadSyncLogs(); // ログを即座に更新
+      }
+    } catch (error) {
+      setSyncStatus(`Zaico → プロジェクト同期エラー: ${error.message}`);
+      logSyncActivity('zaico_to_project_sync_daterange', 'error', { error: error.message });
       loadSyncLogs(); // ログを即座に更新
     } finally {
       setIsLoading(false);
@@ -472,12 +542,40 @@ const ZaicoSyncManager = () => {
               disabled={isLoading}
               className="sync-button zaico-to-project"
             >
-              Zaico → プロジェクト
+              Zaico → プロジェクト（全件）
+            </button>
+            <div className="date-range-inputs">
+              <div className="input-group">
+                <label>開始日:</label>
+                <input
+                  type="date"
+                  value={inventoryDateRange.startDate}
+                  onChange={(e) => setInventoryDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="input-group">
+                <label>終了日:</label>
+                <input
+                  type="date"
+                  value={inventoryDateRange.endDate}
+                  onChange={(e) => setInventoryDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+            <button 
+              onClick={handleSyncZaicoToProjectWithDateRange}
+              disabled={isLoading || !inventoryDateRange.startDate || !inventoryDateRange.endDate}
+              className="sync-button zaico-to-project-daterange"
+            >
+              📦 Zaico → プロジェクト（日付範囲指定）
             </button>
             <button 
               onClick={handleSyncExistingInventory}
               disabled={isLoading}
               className="sync-button"
+              style={{ display: 'none' }}
             >
               既存在庫を同期
             </button>
@@ -492,6 +590,7 @@ const ZaicoSyncManager = () => {
               onClick={handleSyncOutboundItems}
               disabled={isLoading}
               className="sync-button"
+              style={{ display: 'none' }}
             >
               発送済み商品を同期
             </button>

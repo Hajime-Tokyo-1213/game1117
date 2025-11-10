@@ -4,6 +4,7 @@ import { getAllConsoles } from '../utils/productMaster';
 import { generateManagementNumber, generateProductCode } from '../utils/productCodeGenerator';
 import { getBuybackBasePrice } from '../utils/priceCalculator';
 import { createInventoryInZaico, createPurchaseInZaico, logSyncActivity } from '../utils/zaicoApi';
+import { recordLedgerPurchase } from '../utils/ledgerRecords';
 import './Rating.css';
 
 // 付属品を短く表示する関数
@@ -578,6 +579,19 @@ const Rating = () => {
           }
         });
         localStorage.setItem('inventoryHistory', JSON.stringify(inventoryHistory));
+
+        recordLedgerPurchase({
+          inventoryItem: inventoryData[existingIndex],
+          quantity: group.totalQuantity,
+          unitPriceJPY: firstItem.buybackPrice,
+          eventDate: new Date().toISOString(),
+          performer: currentApp.assessorName || '',
+          reference: {
+            type: 'buyback',
+            applicationNumber: currentApp.applicationNumber
+          },
+          managementNumbers: group.allManagementNumbers
+        });
       } else {
         // 新規在庫として追加
         const inventoryItem = {
@@ -614,6 +628,19 @@ const Rating = () => {
           }
         };
         inventoryData.push(inventoryItem);
+
+        recordLedgerPurchase({
+          inventoryItem,
+          quantity: group.totalQuantity,
+          unitPriceJPY: firstItem.buybackPrice,
+          eventDate: inventoryItem.registeredDate,
+          performer: currentApp.assessorName || '',
+          reference: {
+            type: 'buyback',
+            applicationNumber: currentApp.applicationNumber
+          },
+          managementNumbers: group.allManagementNumbers
+        });
         
         // zaico連携処理（入庫データとして登録して仕入単価を設定）
         try {
