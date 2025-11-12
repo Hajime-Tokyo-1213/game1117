@@ -499,8 +499,8 @@ const parseLinkHeader = (linkHeader) => {
   return links;
 };
 
-// ページネーション対応: Zaicoから在庫データを全ページ取得（最大2500件対応）
-export const getInventoriesFromZaico = async (maxPages = 3) => {
+// ページネーション対応: Zaicoから在庫データを全ページ取得（必要に応じて全件取得）
+export const getInventoriesFromZaico = async (maxPages = Infinity) => {
   try {
     console.log('=== Zaico在庫データ取得開始（ページネーション対応） ===');
     

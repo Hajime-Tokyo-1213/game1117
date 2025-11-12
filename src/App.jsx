@@ -26,6 +26,7 @@ import Dashboard from './pages/Dashboard';
 import SalesAnalytics from './pages/SalesAnalytics';
 import UserManagement from './pages/UserManagement';
 import ZaicoSyncSettings from './pages/ZaicoSyncSettings';
+import ColorLibrarySettings from './pages/ColorLibrarySettings';
 import ApiKeyChecker from './components/ApiKeyChecker';
 import { insertMockAnalyticsData } from './utils/insertMockAnalyticsData';
 
@@ -229,6 +230,14 @@ function AppContent() {
         <PrivateRoute allowedRoles={['admin', 'manager']}>
           <Layout>
             <ZaicoSyncSettings />
+          </Layout>
+        </PrivateRoute>
+      } />
+      
+      <Route path="/settings/color-library" element={
+        <PrivateRoute allowedRoles={['admin', 'manager']}>
+          <Layout>
+            <ColorLibrarySettings />
           </Layout>
         </PrivateRoute>
       } />

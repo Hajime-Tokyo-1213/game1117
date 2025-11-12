@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { manufacturers, colors, conditions, accessories } from '../data/gameConsoles';
-import { getAllConsoles } from '../utils/productMaster';
+import { manufacturers, conditions, accessories } from '../data/gameConsoles';
+import { getAllConsoles, getConsoleColorList } from '../utils/productMaster';
 import { generateManagementNumber } from '../utils/productCodeGenerator';
 import './BuybackApplication.css';
 
@@ -358,7 +358,7 @@ const BuybackApplication = () => {
                   onChange={(e) => setCurrentItem({...currentItem, color: e.target.value})}
                 >
                   <option value="">選択しない</option>
-                  {colors.map(color => (
+                  {getConsoleColorList(currentItem.console).map(color => (
                     <option key={color} value={color}>{color}</option>
                   ))}
                 </select>

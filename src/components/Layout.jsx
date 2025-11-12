@@ -204,6 +204,9 @@ const Layout = ({ children }) => {
                       <Link to="/settings/zaico-sync" className={isActive('/settings/zaico-sync') ? 'active' : ''}>
                         🔄 Zaico同期管理
                       </Link>
+                      <Link to="/settings/color-library" className={isActive('/settings/color-library') ? 'active' : ''}>
+                        🎨 カラーライブラリ
+                      </Link>
                     </div>
                   )}
                 </div>

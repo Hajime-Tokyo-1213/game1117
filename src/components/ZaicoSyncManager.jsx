@@ -164,8 +164,9 @@ const ZaicoSyncManager = () => {
     try {
       const result = await syncExistingInventoryWithZaico();
       if (result.success) {
-        setSyncStatus(`既存在庫同期完了: ${result.syncCount}件のzaicoIdを設定`);
-        logSyncActivity('existing_inventory_sync', 'success', { syncCount: result.syncCount });
+        const metaUpdates = result.metadataUpdateCount || 0;
+        setSyncStatus(`既存在庫同期完了: zaicoId設定${result.syncCount}件, 作成日補完${metaUpdates}件`);
+        logSyncActivity('existing_inventory_sync', 'success', { syncCount: result.syncCount, metadataUpdateCount: metaUpdates });
         loadSyncLogs(); // ログを即座に更新
       } else {
         setSyncStatus(`既存在庫同期エラー: ${result.error}`);

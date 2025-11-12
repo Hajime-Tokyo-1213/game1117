@@ -1,6 +1,22 @@
 // 商品マスタ管理ユーティリティ
 
-import { gameConsoles as defaultConsoles, manufacturers } from '../data/gameConsoles';
+import { gameConsoles as defaultConsoles, manufacturers, consoleColorOptions, colors } from '../data/gameConsoles';
+
+const appendYearToLabel = (console) => {
+  if (!console?.label) return console;
+
+  const hasYear = typeof console.year === 'number' && console.year > 0;
+  const baseLabel = console.label.replace(/（\d{4}）$/u, '');
+
+  if (!hasYear) {
+    return { ...console, label: baseLabel };
+  }
+
+  return {
+    ...console,
+    label: `${baseLabel}（${console.year}）`
+  };
+};
 
 /**
  * 全ての機種リストを取得（デフォルト + カスタム）
@@ -14,10 +30,57 @@ export const getAllConsoles = () => {
     merged[mfrValue] = [
       ...(defaultConsoles[mfrValue] || []),
       ...(customConsoles[mfrValue] || [])
-    ].sort((a, b) => b.year - a.year); // 新しい順
+    ]
+      .sort((a, b) => (b.year || 0) - (a.year || 0)) // 新しい順
+      .map(appendYearToLabel);
   });
   
   return merged;
+};
+
+/**
+ * カスタムカラー設定を取得
+ */
+export const getCustomConsoleColors = () => {
+  return JSON.parse(localStorage.getItem('customConsoleColors') || '{}');
+};
+
+/**
+ * カスタムカラー設定を保存
+ */
+export const saveCustomConsoleColors = (customColors) => {
+  localStorage.setItem('customConsoleColors', JSON.stringify(customColors));
+};
+
+/**
+ * 指定機種のカラー一覧（公式 + カスタム）を取得
+ * 公式カラーが存在しない場合は汎用カラーを返す
+ */
+export const getConsoleColorList = (consoleValue) => {
+  if (!consoleValue) return colors;
+
+  const customColors = getCustomConsoleColors();
+  const defaultList = consoleColorOptions[consoleValue] || [];
+  const customList = (customColors[consoleValue] || []).map(color => color.name).filter(Boolean);
+
+  const combined = [...defaultList, ...customList].filter(Boolean);
+
+  if (combined.length === 0) {
+    return colors;
+  }
+
+  return Array.from(new Set(combined));
+};
+
+/**
+ * 指定機種のカラー詳細情報（公式 + カスタム）を取得
+ */
+export const getConsoleColorDetails = (consoleValue) => {
+  const customColors = getCustomConsoleColors();
+  return {
+    official: consoleColorOptions[consoleValue] || [],
+    custom: customColors[consoleValue] || []
+  };
 };
 
 /**

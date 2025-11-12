@@ -10,16 +10,24 @@ export const syncExistingInventoryWithZaico = async () => {
     const projectInventory = JSON.parse(localStorage.getItem('inventory') || '[]');
     console.log('プロジェクト在庫数:', projectInventory.length);
     
-    // Zaicoの在庫データを取得（ページネーション対応、最大3ページ=2500件）
-    const zaicoInventory = await getInventoriesFromZaico(3);
+    // Zaicoの在庫データを全件取得（ページネーション対応）
+    const zaicoInventory = await getInventoriesFromZaico();
     console.log('Zaico在庫数:', zaicoInventory.length);
+    const zaicoInventoryById = new Map(zaicoInventory.map(item => [item.id, item]));
     
     let syncCount = 0;
+    let metadataUpdateCount = 0;
     
     // プロジェクト在庫をループしてzaicoIdを設定
     for (const projectItem of projectInventory) {
       if (projectItem.zaicoId) {
         console.log(`既にzaicoIdが設定済み: ${projectItem.title}`);
+        const existingZaicoItem = zaicoInventoryById.get(projectItem.zaicoId);
+        if (existingZaicoItem && !projectItem.zaicoOriginalDate) {
+          projectItem.zaicoOriginalDate = existingZaicoItem.created_at || existingZaicoItem.updated_at || null;
+          console.log(`zaicoOriginalDateを補完: ${projectItem.title} -> ${projectItem.zaicoOriginalDate}`);
+          metadataUpdateCount++;
+        }
         continue;
       }
       
@@ -33,6 +41,7 @@ export const syncExistingInventoryWithZaico = async () => {
       if (matchingZaicoItem) {
         // zaicoIdを設定
         projectItem.zaicoId = matchingZaicoItem.id;
+        projectItem.zaicoOriginalDate = matchingZaicoItem.created_at || matchingZaicoItem.updated_at || null;
         syncCount++;
         console.log(`zaicoIdを設定: ${projectItem.title} -> ${matchingZaicoItem.id}`);
       }
@@ -41,8 +50,8 @@ export const syncExistingInventoryWithZaico = async () => {
     // 更新された在庫データを保存
     localStorage.setItem('inventory', JSON.stringify(projectInventory));
     
-    console.log(`同期完了: ${syncCount}件のzaicoIdを設定`);
-    return { success: true, syncCount };
+    console.log(`同期完了: zaicoId設定${syncCount}件, 作成日補完${metadataUpdateCount}件`);
+    return { success: true, syncCount, metadataUpdateCount };
     
   } catch (error) {
     console.error('既存在庫同期エラー:', error);
@@ -75,8 +84,8 @@ export const syncZaicoToProject = async (dateRange = null) => {
       console.log('フィルタリング条件: 在庫数量1以上');
     }
     
-    // zaicoの在庫データを取得（ページネーション対応、最大3ページ=2500件）
-    const zaicoInventory = await getInventoriesFromZaico(3);
+    // zaicoの在庫データを全件取得（ページネーション対応）
+    const zaicoInventory = await getInventoriesFromZaico();
     console.log('zaico在庫数（フィルタリング前）:', zaicoInventory.length);
     
     // フィルタリング: 数量0のものは除外、数量1以上のものは取り込み対象
