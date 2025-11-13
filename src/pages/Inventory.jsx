@@ -9,15 +9,12 @@ import './Inventory.css';
 const Inventory = () => {
   const [inventory, setInventory] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [productTypeFilter, setProductTypeFilter] = useState('');
-  const [manufacturerFilter, setManufacturerFilter] = useState('');
   const [rankFilter, setRankFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   
   // ページネーション関連
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [showInStockOnly, setShowInStockOnly] = useState(false);
   
   // 表示モード
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'detail'
@@ -65,6 +62,12 @@ const Inventory = () => {
   // 在庫データを読み込み
   useEffect(() => {
     const inventoryData = JSON.parse(localStorage.getItem('inventory') || '[]');
+    
+    // デバッグ: zaicoIdがある在庫を確認
+    const itemsWithZaicoId = inventoryData.filter(item => item.zaicoId);
+    console.log('[在庫管理] 総在庫数:', inventoryData.length, '件');
+    console.log('[在庫管理] zaicoIdが設定されている在庫:', itemsWithZaicoId.length, '件');
+    
     setInventory(inventoryData);
     setAllGameConsoles(getAllConsoles());
   }, []);
@@ -131,12 +134,6 @@ const Inventory = () => {
     const searchText = `${item.consoleLabel || ''} ${item.softwareName || ''} ${item.colorLabel || ''} ${managementNumbersText}`.toLowerCase();
     const matchesSearch = searchText.includes(searchTerm.toLowerCase());
     
-    // 商品タイプフィルター
-    const matchesProductType = !productTypeFilter || item.productType === productTypeFilter;
-    
-    // メーカーフィルター
-    const matchesManufacturer = !manufacturerFilter || item.manufacturer === manufacturerFilter;
-    
     // ランクフィルター
     const matchesRank = !rankFilter || item.assessedRank === rankFilter;
     
@@ -144,11 +141,7 @@ const Inventory = () => {
     const itemStatus = item.status || 'in_stock';
     const matchesStatus = !statusFilter || itemStatus === statusFilter;
     
-    // 在庫ありのみフィルター
-    const hasStock = item.quantity > 0;
-    const matchesStockFilter = !showInStockOnly || hasStock;
-    
-    return matchesSearch && matchesProductType && matchesManufacturer && matchesRank && matchesStatus && matchesStockFilter;
+    return matchesSearch && matchesRank && matchesStatus;
   });
 
   // ページネーション計算
@@ -162,6 +155,22 @@ const Inventory = () => {
     setCurrentPage(newPage);
     // ページ変更時にスクロールをトップに戻す
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ページ番号入力で直接移動
+  const handlePageJump = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const input = form.querySelector('input[type="number"]');
+    if (input) {
+      const pageNumber = parseInt(input.value, 10);
+      if (!isNaN(pageNumber) && pageNumber >= 1 && pageNumber <= totalPages) {
+        handlePageChange(pageNumber);
+        input.value = '';
+      } else {
+        alert(`ページ番号は1から${totalPages}の間で指定してください`);
+      }
+    }
   };
 
   // ページサイズ変更時の処理
@@ -677,19 +686,14 @@ const Inventory = () => {
           <div className="card-label">総在庫数</div>
         </div>
         <div className="summary-card">
-          <div className="card-icon">💰</div>
-          <div className="card-value">¥{totalValue.toLocaleString()}</div>
-          <div className="card-label">在庫評価額</div>
+          <div className="card-icon">🎮</div>
+          <div className="card-value">{inventory.length}</div>
+          <div className="card-label">商品種別数</div>
         </div>
         <div className="summary-card">
           <div className="card-icon">📈</div>
           <div className="card-value">¥{averagePrice.toLocaleString()}</div>
           <div className="card-label">平均単価</div>
-        </div>
-        <div className="summary-card">
-          <div className="card-icon">🎮</div>
-          <div className="card-value">{inventory.length}</div>
-          <div className="card-label">商品種別数</div>
         </div>
       </div>
 
@@ -702,19 +706,6 @@ const Inventory = () => {
       <div className="filter-section">
         <h3>🔍 フィルター</h3>
         <div className="filter-controls">
-          <div className="form-group stock-filter-group">
-            <div className="stock-filter-checkbox">
-              <input 
-                type="checkbox" 
-                id="stock-filter"
-                checked={showInStockOnly} 
-                onChange={(e) => setShowInStockOnly(e.target.checked)}
-              />
-              <label htmlFor="stock-filter">
-                在庫ありのみ表示
-              </label>
-            </div>
-          </div>
           <div className="form-group">
             <label>商品検索</label>
             <input
@@ -723,23 +714,6 @@ const Inventory = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="機種名、ソフト名、カラー、管理番号で検索"
             />
-          </div>
-          <div className="form-group">
-            <label>商品タイプ</label>
-            <select value={productTypeFilter} onChange={(e) => setProductTypeFilter(e.target.value)}>
-              <option value="">全て</option>
-              <option value="console">🎮 ゲーム本体</option>
-              <option value="software">💿 ゲームソフト</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label>メーカー</label>
-            <select value={manufacturerFilter} onChange={(e) => setManufacturerFilter(e.target.value)}>
-              <option value="">全て</option>
-              {manufacturers.map(m => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
           </div>
           <div className="form-group">
             <label>査定ランク</label>
@@ -789,8 +763,6 @@ const Inventory = () => {
         <table className="inventory-table">
           <thead>
             <tr>
-              <th>管理番号</th>
-              <th>商品タイプ</th>
               <th>メーカー</th>
               <th>機種/ソフト名</th>
               <th>カラー</th>
@@ -803,36 +775,8 @@ const Inventory = () => {
           </thead>
           <tbody>
             {paginatedInventory.map(item => {
-              // 管理番号の表示テキストを生成
-              let managementNumberDisplay = '-';
-              if (item.managementNumbers && item.managementNumbers.length > 0) {
-                const numbers = item.managementNumbers;
-                if (numbers.length === 1) {
-                  managementNumberDisplay = numbers[0];
-                } else {
-                  const first = numbers[0];
-                  const last = numbers[numbers.length - 1];
-                  const firstSeq = first.split('_').pop();
-                  const lastSeq = last.split('_').pop();
-                  const baseNumber = first.substring(0, first.lastIndexOf('_') + 1);
-                  managementNumberDisplay = `${baseNumber}${firstSeq}~${lastSeq}`;
-                }
-              }
-              
               return (
               <tr key={item.id} onClick={() => handleViewDetails(item)}>
-                <td className="management-number-cell">
-                  {managementNumberDisplay !== '-' ? (
-                    <span className="management-number-badge-inv">{managementNumberDisplay}</span>
-                  ) : (
-                    <span className="no-management-number">-</span>
-                  )}
-                </td>
-                <td>
-                  <span className="type-badge">
-                    {item.productType === 'console' ? '🎮 本体' : '💿 ソフト'}
-                  </span>
-                </td>
                 <td className="manufacturer-cell">{item.manufacturerLabel}</td>
                 <td className="product-name">
                   {item.productType === 'software' ? (
@@ -879,7 +823,7 @@ const Inventory = () => {
           </tbody>
           <tfoot>
             <tr className="total-row">
-              <td colSpan="7">合計</td>
+              <td colSpan="5">合計</td>
               <td>{filteredInventory.reduce((sum, item) => sum + item.quantity, 0)}</td>
               <td>-</td>
               <td>-</td>
@@ -1854,46 +1798,84 @@ const Inventory = () => {
       {/* ページネーションボタン */}
       {totalPages > 1 && (
         <div className="pagination">
-          <button 
-            onClick={() => handlePageChange(currentPage - 1)} 
-            disabled={currentPage === 1}
-            className="pagination-btn"
-            aria-label="前のページ"
-          >
-            ← 前へ
-          </button>
-          
-          <div className="pagination-numbers">
-            {getPaginationPages().map((page, index) => {
-              if (page === 'ellipsis-start' || page === 'ellipsis-end') {
+          <div className="pagination-main">
+            <button 
+              onClick={() => handlePageChange(currentPage - 1)} 
+              disabled={currentPage === 1}
+              className="pagination-btn"
+              aria-label="前のページ"
+            >
+              ← 前へ
+            </button>
+            
+            <div className="pagination-numbers">
+              {getPaginationPages().map((page, index) => {
+                if (page === 'ellipsis-start' || page === 'ellipsis-end') {
+                  return (
+                    <span key={`ellipsis-${index}`} className="pagination-ellipsis">
+                      ...
+                    </span>
+                  );
+                }
                 return (
-                  <span key={`ellipsis-${index}`} className="pagination-ellipsis">
-                    ...
-                  </span>
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page)}
+                    className={`pagination-number ${currentPage === page ? 'active' : ''}`}
+                    aria-label={`ページ ${page}`}
+                    aria-current={currentPage === page ? 'page' : undefined}
+                  >
+                    {page}
+                  </button>
                 );
-              }
-              return (
-                <button
-                  key={page}
-                  onClick={() => handlePageChange(page)}
-                  className={`pagination-number ${currentPage === page ? 'active' : ''}`}
-                  aria-label={`ページ ${page}`}
-                  aria-current={currentPage === page ? 'page' : undefined}
-                >
-                  {page}
-                </button>
-              );
-            })}
+              })}
+            </div>
+            
+            <button 
+              onClick={() => handlePageChange(currentPage + 1)} 
+              disabled={currentPage === totalPages}
+              className="pagination-btn"
+              aria-label="次のページ"
+            >
+              次へ →
+            </button>
           </div>
           
-          <button 
-            onClick={() => handlePageChange(currentPage + 1)} 
-            disabled={currentPage === totalPages}
-            className="pagination-btn"
-            aria-label="次のページ"
-          >
-            次へ →
-          </button>
+          {/* ページ番号直接入力 */}
+          <div className="pagination-jump">
+            <form onSubmit={handlePageJump} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ fontSize: '14px', color: '#6c757d' }}>ページ:</span>
+              <input
+                type="number"
+                min="1"
+                max={totalPages}
+                placeholder={currentPage.toString()}
+                style={{
+                  width: '60px',
+                  padding: '6px 8px',
+                  border: '1px solid #ced4da',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  textAlign: 'center'
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  padding: '6px 12px',
+                  border: '1px solid #007bff',
+                  background: '#007bff',
+                  color: 'white',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                移動
+              </button>
+            </form>
+          </div>
           
           <div className="pagination-info-mobile">
             <span>{currentPage} / {totalPages}</span>

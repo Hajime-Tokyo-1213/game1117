@@ -519,12 +519,7 @@ const Sales = () => {
       return;
     }
 
-    // 送料と配送期間をチェック
-    if (!tempShippingFee || tempShippingFee <= 0) {
-      alert('送料を入力してください');
-      return;
-    }
-    
+    // 配送期間をチェック
     if (!tempDeliveryDays || tempDeliveryDays.trim() === '') {
       alert('配送期間を入力してください');
       return;
@@ -779,12 +774,6 @@ const Sales = () => {
   const handlePrint = () => {
     if (!currentReq || !currentReq.items || currentReq.items.length === 0) {
       alert('印刷する商品がありません');
-      return;
-    }
-    
-    // 見積もり中の場合、送料チェック
-    if (currentReq.status === 'pending' && (!tempShippingFee || tempShippingFee <= 0)) {
-      alert('送料を入力してから印刷してください');
       return;
     }
     
@@ -1651,7 +1640,7 @@ const Sales = () => {
               </div>
 
               <div className="form-group">
-                <label>送料（USD） *</label>
+                <label>送料（USD）</label>
                 <div className="price-input-wrapper">
                   <input
                     type="number"
@@ -1734,8 +1723,8 @@ const Sales = () => {
               <button 
                 className="btn-primary" 
                 onClick={() => {
-                  if (!shippingMethod || shippingFeeUSD <= 0 || !shippedDate || !salesStaffName) {
-                    alert('必須項目（発送方法、送料、発送日、販売担当者）を入力してください');
+                  if (!shippingMethod || !shippedDate || !salesStaffName) {
+                    alert('必須項目（発送方法、発送日、販売担当者）を入力してください');
                     return;
                   }
                   setSaleStep(5);
@@ -2636,7 +2625,7 @@ const Sales = () => {
                 <div className="sales-shipping-quote-section">
                   <div className="sales-quote-row">
                     <div className="sales-quote-item">
-                      <label htmlFor="shippingFee">📦 送料（JPY）*</label>
+                      <label htmlFor="shippingFee">📦 送料（JPY）</label>
                       <input
                         type="number"
                         id="shippingFee"

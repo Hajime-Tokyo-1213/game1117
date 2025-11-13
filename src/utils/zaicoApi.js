@@ -671,6 +671,33 @@ const getInventoriesWithHeaders = async (endpoint) => {
 
       const result = await response.json();
       
+      // デバッグ: 最初の在庫データの構造を確認（stocktake_attributesの有無を確認）
+      const firstInventory = Array.isArray(result.data || result) ? (result.data || result)[0] : null;
+      if (firstInventory) {
+        console.log('[Zaico API] 最初の在庫データの構造:', {
+          id: firstInventory.id,
+          title: firstInventory.title,
+          hasStocktakeAttributes: !!firstInventory.stocktake_attributes,
+          stocktakeAttributes: firstInventory.stocktake_attributes,
+          allKeys: Object.keys(firstInventory).slice(0, 30)
+        });
+        
+        // stocktake_attributesの全フィールドを確認
+        if (firstInventory.stocktake_attributes) {
+          console.log('[Zaico API] stocktake_attributesの全フィールド:', Object.keys(firstInventory.stocktake_attributes));
+          console.log('[Zaico API] stocktake_attributesの全内容:', JSON.stringify(firstInventory.stocktake_attributes, null, 2));
+        }
+        
+        // 日付関連のフィールドを確認
+        const dateFields = Object.keys(firstInventory).filter(key => 
+          key.includes('date') || key.includes('Date') || key.includes('at') || key.includes('At')
+        );
+        console.log('[Zaico API] 日付関連のフィールド:', dateFields);
+        dateFields.forEach(field => {
+          console.log(`[Zaico API] ${field}:`, firstInventory[field]);
+        });
+      }
+      
       // レスポンスオブジェクトにヘッダー情報を付加
       return {
         data: result.data || result,
@@ -700,6 +727,17 @@ export const getPackingSlipsFromZaico = async (page = 1) => {
     console.error('zaico出庫データ取得エラー:', error);
     throw error;
   }
+};
+
+// 在庫の棚卸し履歴を取得
+// 注意: Zaico APIでは棚卸し履歴エンドポイントが存在しないか、アクセス権限がない可能性があります
+// そのため、この関数は現在使用されていません（エラーログを避けるため）
+export const getStocktakeHistoryFromZaico = async (inventoryId) => {
+  // 棚卸し履歴APIは401 Unauthorizedエラーを返すため、無効化
+  // Zaico APIの仕様上、棚卸し履歴を取得するエンドポイントが存在しない可能性があります
+  // 代わりに、stocktake_attributes.checked_atがnullの場合でも、
+  // updated_atや他のフィールドから推測する必要があるかもしれません
+  return null;
 };
 
 // 出庫物品データを取得（ZaicoSyncManager用）

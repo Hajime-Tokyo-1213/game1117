@@ -6,6 +6,10 @@ const Ledger = () => {
   const [rawLedgerRecords, setRawLedgerRecords] = useState([]);
   const [expandedRecord, setExpandedRecord] = useState(null);
   const [records, setRecords] = useState([]);
+  
+  // ページネーション関連
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const formatNumber = (value) => {
     const num = Number(value);
@@ -145,6 +149,13 @@ const Ledger = () => {
         .filter(Boolean)
         .join(' ') || '-';
       const hasSale = (record.sale?.totalQuantity || 0) > 0;
+      
+      // 販売先住所を取得
+      const buyerAddress = hasSale && lastSale?.buyer && typeof lastSale.buyer === 'object'
+        ? (lastSale.buyer.postalCode || lastSale.buyer.address || lastSale.buyer.country
+            ? `${lastSale.buyer.postalCode || ''} ${lastSale.buyer.address || ''} ${lastSale.buyer.country || ''}`.trim()
+            : '-')
+        : '-';
 
       return {
         id: record.id,
@@ -167,6 +178,7 @@ const Ledger = () => {
         rawSaleDate: saleDateISO,
         salePrice: hasSale ? record.sale?.totalRevenueJPY || 0 : '-',
         buyer: hasSale ? buyerNameRaw : '-',
+        buyerAddress: hasSale ? buyerAddress : '-',
         status: record.status
       };
     });
@@ -178,7 +190,84 @@ const Ledger = () => {
     });
 
     setRecords(tableRecords);
+    // フィルター変更時にページを1にリセット
+    setCurrentPage(1);
   }, [filters]);
+  
+  // ページネーション計算
+  const totalPages = Math.ceil(records.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedRecords = records.slice(startIndex, endIndex);
+  
+  // ページ変更時の処理
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    // ページ変更時にスクロールをトップに戻す
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  
+  // ページ番号入力で直接移動
+  const handlePageJump = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const input = form.querySelector('input[type="number"]');
+    if (input) {
+      const pageNumber = parseInt(input.value, 10);
+      if (!isNaN(pageNumber) && pageNumber >= 1 && pageNumber <= totalPages) {
+        handlePageChange(pageNumber);
+        input.value = '';
+      } else {
+        alert(`ページ番号は1から${totalPages}の間で指定してください`);
+      }
+    }
+  };
+  
+  // ページサイズ変更時の処理
+  const handlePageSizeChange = (newPageSize) => {
+    setPageSize(newPageSize);
+    setCurrentPage(1); // ページサイズ変更時は1ページ目に戻る
+  };
+  
+  // スマートページネーション: 表示するページ番号のリストを生成
+  const getPaginationPages = () => {
+    const pages = [];
+    const maxVisiblePages = 7; // 表示する最大ページ数
+    const sidePages = 2; // 現在ページの前後に表示するページ数
+    
+    if (totalPages <= maxVisiblePages) {
+      // ページ数が少ない場合は全て表示
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    
+    // 常に最初のページを表示
+    pages.push(1);
+    
+    let startPage = Math.max(2, currentPage - sidePages);
+    let endPage = Math.min(totalPages - 1, currentPage + sidePages);
+    
+    // 前の省略記号が必要か
+    if (startPage > 2) {
+      pages.push('ellipsis-start');
+    }
+    
+    // 現在ページ周辺のページを追加
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    
+    // 後の省略記号が必要か
+    if (endPage < totalPages - 1) {
+      pages.push('ellipsis-end');
+    }
+    
+    // 常に最後のページを表示
+    if (totalPages > 1) {
+      pages.push(totalPages);
+    }
+    
+    return pages;
+  };
 
   const saleLedgerRecords = rawLedgerRecords.filter(record => (record.sale?.totalQuantity || 0) > 0);
   const totalPurchaseCost = rawLedgerRecords.reduce((sum, record) => sum + (record.purchase?.totalCostJPY || 0), 0);
@@ -331,7 +420,7 @@ const Ledger = () => {
               onChange={(e) => handleFilterChange('dateTo', e.target.value)}
             />
           </div>
-          <div className="form-group">
+          <div className="form-group form-group-transaction-type">
             <label>取引種別</label>
             <select
               value={filters.transactionType}
@@ -401,125 +490,6 @@ const Ledger = () => {
         </div>
       </div>
 
-      {/* 販売記録セクション */}
-      {saleLedgerRecords.length > 0 && (
-        <div className="sales-records-section">
-          <h2>📊 販売記録（利益計算）</h2>
-          <p className="section-subtitle">海外販売やその他チャネルの販売データをまとめて確認できます</p>
-          
-          {saleLedgerRecords.map(record => {
-            const lastSaleEvent = record.sale.events[record.sale.events.length - 1];
-            const purchaseUnitCost = record.purchase?.averageUnitCostJPY || 0;
-            const totalProfitJPY = record.sale.totalRevenueJPY - record.purchase.totalCostJPY;
-            const customer = record.product?.customer || {};
-            const buyerName =
-              (lastSaleEvent?.buyer && typeof lastSaleEvent.buyer === 'object'
-                ? lastSaleEvent.buyer.name
-                : lastSaleEvent?.buyer) || '-';
-            const saleDateLabel = formatDate(lastSaleEvent?.date);
-            const productTitle = record.product?.title || '販売記録';
-
-            return (
-              <div key={record.id} className="sales-record-card">
-                <div
-                  className="sales-record-header"
-                  onClick={() => setExpandedRecord(expandedRecord === record.id ? null : record.id)}
-                >
-                  <div className="record-header-left">
-                    <h3>{productTitle}</h3>
-                    <p className="record-date">最終販売日: {saleDateLabel}</p>
-                    <p className="record-request">在庫ID: {record.inventoryId}</p>
-                  </div>
-                  <div className="record-header-right">
-                    <div className="record-summary">
-                      <div className="summary-item">
-                        <span className="summary-label">仕入れ:</span>
-                        <span className="summary-value cost">{formatCurrency(record.purchase.totalCostJPY)}</span>
-                      </div>
-                      <div className="summary-item">
-                        <span className="summary-label">販売:</span>
-                        <span className="summary-value sales">{formatCurrency(record.sale.totalRevenueJPY)}</span>
-                      </div>
-                      <div className="summary-item">
-                        <span className="summary-label">利益:</span>
-                        <span className="summary-value profit">{formatCurrency(totalProfitJPY)}</span>
-                      </div>
-                    </div>
-                    <span className="expand-icon">{expandedRecord === record.id ? '▼' : '▶'}</span>
-                  </div>
-                </div>
-
-                {expandedRecord === record.id && (
-                  <div className="sales-record-details">
-                    <div className="customer-info">
-                      <h4>👤 買取時の顧客情報</h4>
-                      <p><strong>名前:</strong> {customer.name || 'N/A'}</p>
-                      <p><strong>住所:</strong> {customer.address || 'N/A'}</p>
-                      <p><strong>メール:</strong> {customer.email || 'N/A'}</p>
-                    </div>
-
-                    <div className="items-detail">
-                      <h4>📦 販売明細</h4>
-                      <table className="sales-detail-table">
-                        <thead>
-                          <tr>
-                            <th>販売日</th>
-                            <th>数量</th>
-                            <th>販売単価</th>
-                            <th>販売合計</th>
-                            <th>仕入原価</th>
-                            <th>利益</th>
-                            <th>送料</th>
-                            <th>販売先</th>
-                            <th>チャネル</th>
-                            <th>担当者</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {record.sale.events.map((event, idx) => {
-                            const eventBuyer =
-                              (event.buyer && typeof event.buyer === 'object' ? event.buyer.name : event.buyer) || '-';
-                            const eventProfit = event.totalPriceJPY - purchaseUnitCost * event.quantity;
-                            const shippingDisplay = event.shippingFeeJPY
-                              ? formatCurrency(event.shippingFeeJPY)
-                              : '-';
-                            return (
-                              <tr key={idx}>
-                                <td>{formatDate(event.date)}</td>
-                                <td>{formatNumber(event.quantity)}</td>
-                                <td>{formatCurrency(event.unitPriceJPY)}</td>
-                                <td>{formatCurrency(event.totalPriceJPY)}</td>
-                                <td>{formatCurrency(purchaseUnitCost * event.quantity)}</td>
-                                <td className="profit-cell">{formatCurrency(eventProfit)}</td>
-                                <td>{shippingDisplay}</td>
-                                <td>{eventBuyer}</td>
-                                <td>{event.salesChannel || '-'}</td>
-                                <td>{event.staff || '-'}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot>
-                          <tr className="total-row">
-                            <td colSpan="2">合計</td>
-                            <td>{formatCurrency(purchaseUnitCost)}</td>
-                            <td>{formatCurrency(record.sale.totalRevenueJPY)}</td>
-                            <td>{formatCurrency(record.purchase.totalCostJPY)}</td>
-                            <td className="profit-total">{formatCurrency(totalProfitJPY)}</td>
-                            <td>{formatCurrency(record.sale.totalShippingJPY)}</td>
-                            <td colSpan="3"></td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       {/* 古物台帳テーブル */}
       <div className="ledger-table-section">
         <div className="action-buttons">
@@ -535,6 +505,19 @@ const Ledger = () => {
             </button>
             <button onClick={handleExportData}>エクスポート</button>
             <button onClick={() => window.print()}>印刷</button>
+          </div>
+        </div>
+
+        <div className="pagination-controls">
+          <div className="pagination-info">
+            <span>表示件数: </span>
+            <select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))}>
+              <option value={10}>10件</option>
+              <option value={20}>20件</option>
+              <option value={50}>50件</option>
+              <option value={100}>100件</option>
+            </select>
+            <span>（{records.length}件中 {startIndex + 1}-{Math.min(endIndex, records.length)}件を表示）</span>
           </div>
         </div>
 
@@ -558,11 +541,12 @@ const Ledger = () => {
                   <th>販売日</th>
                   <th>販売価格</th>
                   <th>販売先</th>
+                  <th>販売先住所</th>
                   <th>状態</th>
                 </tr>
               </thead>
               <tbody>
-                {records.map(record => {
+                {paginatedRecords.map(record => {
                   const rankClass = safeRankClass(record.rank);
                   const quantity = formatNumber(record.quantity ?? 0);
                   const price = formatCurrency(record.price);
@@ -590,6 +574,7 @@ const Ledger = () => {
                     <td>{record.saleDate || '-'}</td>
             <td>{salePrice}</td>
             <td>{buyerName}</td>
+                    <td>{record.buyerAddress || '-'}</td>
                     <td>{getStatusBadge(record.status)}</td>
                   </tr>
                 );})}
@@ -600,6 +585,94 @@ const Ledger = () => {
           {records.length === 0 && (
             <div className="empty-records">
               <p>古物台帳に記録がありません</p>
+            </div>
+          )}
+          
+          {/* ページネーション */}
+          {totalPages > 1 && (
+            <div className="pagination">
+              <div className="pagination-main">
+                <button 
+                  onClick={() => handlePageChange(currentPage - 1)} 
+                  disabled={currentPage === 1}
+                  className="pagination-btn"
+                  aria-label="前のページ"
+                >
+                  ← 前へ
+                </button>
+                
+                <div className="pagination-numbers">
+                  {getPaginationPages().map((page, index) => {
+                    if (page === 'ellipsis-start' || page === 'ellipsis-end') {
+                      return (
+                        <span key={`ellipsis-${index}`} className="pagination-ellipsis">
+                          ...
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        key={page}
+                        onClick={() => handlePageChange(page)}
+                        className={`pagination-number ${currentPage === page ? 'active' : ''}`}
+                        aria-label={`ページ ${page}`}
+                        aria-current={currentPage === page ? 'page' : undefined}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                <button 
+                  onClick={() => handlePageChange(currentPage + 1)} 
+                  disabled={currentPage === totalPages}
+                  className="pagination-btn"
+                  aria-label="次のページ"
+                >
+                  次へ →
+                </button>
+              </div>
+              
+              {/* ページ番号直接入力 */}
+              <div className="pagination-jump">
+                <form onSubmit={handlePageJump} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ fontSize: '14px', color: '#6c757d' }}>ページ:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    placeholder={currentPage.toString()}
+                    style={{
+                      width: '60px',
+                      padding: '6px 8px',
+                      border: '1px solid #ced4da',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      textAlign: 'center'
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    style={{
+                      padding: '6px 12px',
+                      border: '1px solid #007bff',
+                      background: '#007bff',
+                      color: 'white',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    移動
+                  </button>
+                </form>
+              </div>
+              
+              <div className="pagination-info-mobile">
+                <span>{currentPage} / {totalPages}</span>
+              </div>
             </div>
           )}
       </div>

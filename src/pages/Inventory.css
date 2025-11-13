@@ -75,13 +75,41 @@
 
 .pagination {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
   gap: 8px;
   margin: 20px 0;
   padding: 15px;
   flex-wrap: wrap;
   max-width: 100%;
+}
+
+.pagination-main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pagination-numbers {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 5px 0;
+  scrollbar-width: thin;
+  scrollbar-color: #007bff #f0f0f0;
+}
+
+.pagination-jump {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .pagination-btn {
@@ -1635,6 +1663,13 @@
   color: #6c757d;
   margin-top: 2px;
   font-style: italic;
+}
+
+.stocktaking-date-small {
+  font-size: 11px;
+  color: #28a745;
+  margin-top: 2px;
+  font-weight: 500;
 }
 
 .date-display {

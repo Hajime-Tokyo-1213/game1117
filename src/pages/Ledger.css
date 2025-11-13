@@ -54,6 +54,10 @@
   margin-bottom: 20px;
 }
 
+.form-group-transaction-type {
+  min-width: 220px;
+}
+
 .form-group label {
   display: block;
   margin-bottom: 5px;
@@ -178,9 +182,31 @@
 
 .table-wrapper {
   overflow-x: auto;
+  overflow-y: visible;
   border: 1px solid #ddd;
   border-radius: 5px;
   margin-bottom: 30px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #3498db #f0f0f0;
+}
+
+.table-wrapper::-webkit-scrollbar {
+  height: 10px;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 5px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: #3498db;
+  border-radius: 5px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #2980b9;
 }
 
 .ledger-table {
@@ -451,4 +477,191 @@
   color: #27ae60;
   font-weight: 700;
   font-size: 16px;
+}
+
+/* ページネーション */
+.pagination-controls {
+  margin: 15px 0;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.pagination-info select {
+  padding: 5px 10px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background-color: white;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin: 20px 0;
+  padding: 15px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.pagination-main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pagination-numbers {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 5px 0;
+  scrollbar-width: thin;
+  scrollbar-color: #007bff #f0f0f0;
+}
+
+.pagination-numbers::-webkit-scrollbar {
+  height: 6px;
+}
+
+.pagination-numbers::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.pagination-numbers::-webkit-scrollbar-thumb {
+  background: #007bff;
+  border-radius: 3px;
+}
+
+.pagination-numbers::-webkit-scrollbar-thumb:hover {
+  background: #0056b3;
+}
+
+.pagination-jump {
+  flex-shrink: 0;
+  margin-left: 10px;
+}
+
+.pagination-btn {
+  padding: 8px 16px;
+  border: 1px solid #007bff;
+  background-color: white;
+  color: #007bff;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background-color: #007bff;
+  color: white;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-number {
+  padding: 8px 12px;
+  min-width: 40px;
+  border: 1px solid #dee2e6;
+  background-color: white;
+  color: #495057;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.pagination-number:hover {
+  background-color: #e9ecef;
+  border-color: #007bff;
+}
+
+.pagination-number.active {
+  background-color: #007bff;
+  color: white;
+  border-color: #007bff;
+  font-weight: bold;
+}
+
+.pagination-ellipsis {
+  padding: 8px 4px;
+  color: #6c757d;
+  font-size: 14px;
+  font-weight: bold;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.pagination-info-mobile {
+  display: none;
+  font-size: 14px;
+  color: #6c757d;
+  font-weight: 500;
+  margin-left: 10px;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+  .pagination {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .pagination-numbers {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .pagination-info-mobile {
+    display: block;
+  }
+
+  .pagination-btn {
+    width: 100%;
+    max-width: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  .pagination-numbers {
+    gap: 3px;
+  }
+
+  .pagination-number {
+    padding: 6px 10px;
+    min-width: 36px;
+    font-size: 13px;
+  }
+
+  .pagination-btn {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
 }
