@@ -219,12 +219,81 @@ const Inventory = () => {
     return pages;
   };
 
+  // CSVエクスポート関数
+  const exportToCSV = (data, filename) => {
+    const blob = new Blob([data], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleExportData = () => {
-    const format = prompt('エクスポート形式を選択してください:\n1. CSV\n2. Excel\n3. PDF', '1');
-    if (format) {
-      const formatName = format === '1' ? 'CSV' : format === '2' ? 'Excel' : 'PDF';
-      alert(`在庫データを${formatName}形式でエクスポートしました`);
-    }
+    // CSVデータの生成
+    const headers = [
+      'メーカー',
+      '機種/ソフト名',
+      'カラー',
+      'ランク',
+      'ステータス',
+      '数量',
+      '買取単価',
+      '登録日',
+      'SKU/ID',
+      '管理番号',
+      '商品タイプ',
+      '製造番号'
+    ];
+
+    // CSVエスケープ関数
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      // カンマ、ダブルクォート、改行を含む場合はクォートで囲む
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    // フィルタリングされた在庫データを使用（全件をエクスポート）
+    const rows = filteredInventory.map(item => {
+      // 商品名の取得
+      const productName = item.productType === 'software' 
+        ? `${item.softwareName || ''} (${item.consoleLabel || ''})` 
+        : (item.consoleLabel || '');
+      
+      // 管理番号を結合
+      const managementNumbers = (item.managementNumbers || []).join('; ') || '';
+      
+      return [
+        item.manufacturerLabel || item.manufacturer || '',
+        productName,
+        item.colorLabel || item.color || '',
+        item.assessedRank || '',
+        item.quantity > 0 ? getStatusLabel(item.status || 'in_stock') : '在庫なし',
+        item.quantity || 0,
+        item.buybackPrice || item.acquisitionPrice || 0,
+        item.registeredDate ? new Date(item.registeredDate).toLocaleDateString('ja-JP') : '',
+        item.id || '',
+        managementNumbers,
+        item.productType === 'console' ? 'ゲーム本体' : item.productType === 'software' ? 'ゲームソフト' : '',
+        item.zaicoId || ''
+      ].map(escapeCSV).join(',');
+    });
+
+    // BOM付きUTF-8でCSVを生成（Excelで正しく開けるように）
+    const csv = '\ufeff' + [headers.map(escapeCSV).join(','), ...rows].join('\n');
+    
+    // ファイル名を生成（現在の日付を含む）
+    const filename = `在庫データ_${new Date().toISOString().split('T')[0]}.csv`;
+    
+    // CSVをダウンロード
+    exportToCSV(csv, filename);
   };
 
   const handleViewDetails = (item) => {

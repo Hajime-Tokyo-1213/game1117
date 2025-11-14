@@ -163,6 +163,109 @@
   color: #3498db;
 }
 
+/* 設定メニューのカテゴリ分けスタイル */
+.settings-dropdown {
+  min-width: 280px;
+  padding: 8px 0;
+}
+
+.settings-category {
+  padding: 8px 0;
+}
+
+.settings-category:not(:last-child) {
+  border-bottom: 1px solid #e9ecef;
+  margin-bottom: 4px;
+  padding-bottom: 12px;
+}
+
+.settings-category-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 20px 4px 20px;
+  margin-bottom: 4px;
+}
+
+.settings-dropdown .settings-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+}
+
+.settings-item-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.settings-item-desc {
+  font-size: 11px;
+  color: #6c757d;
+  line-height: 1.3;
+}
+
+.settings-dropdown a {
+  padding: 10px 20px;
+  align-items: flex-start;
+}
+
+.settings-dropdown a:hover .settings-item-title,
+.settings-dropdown a.active .settings-item-title {
+  color: #3498db;
+}
+
+.settings-dropdown a:hover .settings-item-desc,
+.settings-dropdown a.active .settings-item-desc {
+  color: #5a9fd4;
+}
+
+/* 業務・分析メニューにも同じスタイルを適用 */
+.business-dropdown,
+.analytics-dropdown {
+  min-width: 280px;
+  padding: 8px 0;
+}
+
+.business-dropdown .settings-item,
+.analytics-dropdown .settings-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+}
+
+.business-dropdown a,
+.analytics-dropdown a {
+  padding: 10px 20px;
+  align-items: flex-start;
+}
+
+.business-dropdown a:hover .settings-item-title,
+.business-dropdown a.active .settings-item-title,
+.analytics-dropdown a:hover .settings-item-title,
+.analytics-dropdown a.active .settings-item-title {
+  color: #3498db;
+}
+
+.business-dropdown a:hover .settings-item-desc,
+.business-dropdown a.active .settings-item-desc,
+.analytics-dropdown a:hover .settings-item-desc,
+.analytics-dropdown a.active .settings-item-desc {
+  color: #5a9fd4;
+}
+
+.business-dropdown .settings-item-title,
+.analytics-dropdown .settings-item-title {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .notification-badge-small {
   background-color: #e74c3c;
   color: white;

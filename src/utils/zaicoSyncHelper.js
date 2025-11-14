@@ -46,7 +46,6 @@ export const syncExistingInventoryWithZaico = async () => {
         projectItem.zaicoId = matchingZaicoItem.id;
         projectItem.zaicoOriginalDate = matchingZaicoItem.created_at || matchingZaicoItem.updated_at || null;
         
-        
         syncCount++;
         console.log(`zaicoIdを設定: ${projectItem.title} -> ${matchingZaicoItem.id}`);
       }
@@ -194,7 +193,7 @@ export const syncZaicoToProject = async (dateRange = null) => {
         status: 'in_stock',
         buybackPrice: zaicoPurchasePrice,
         acquisitionPrice: zaicoPurchasePrice,
-        registeredDate: new Date().toISOString(),
+        registeredDate: zaicoItem.created_at || zaicoItem.updated_at || new Date().toISOString(),
         zaicoOriginalDate: zaicoItem.created_at || zaicoItem.updated_at,
         colorLabel: '',
         managementNumbers: [`ZAICO-${zaicoItem.id}`],

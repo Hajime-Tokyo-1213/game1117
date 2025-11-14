@@ -369,12 +369,91 @@ const Ledger = () => {
     }
   };
 
+  // CSVエクスポート関数
+  const exportToCSV = (data, filename) => {
+    const blob = new Blob([data], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleExportData = () => {
-    const format = prompt('エクスポート形式を選択してください:\n1. CSV\n2. Excel\n3. PDF', '1');
-    if (format) {
-      const formatName = format === '1' ? 'CSV' : format === '2' ? 'Excel' : 'PDF';
-      alert(`古物台帳を${formatName}形式でエクスポートしました`);
-    }
+    // CSVデータの生成
+    const headers = [
+      '取引日',
+      '取引種別',
+      'SKU',
+      '管理番号',
+      '品目（商品名）',
+      '特徴（カラー・状態）',
+      'ランク',
+      '数量',
+      '代価',
+      '相手方氏名',
+      '相手方住所',
+      '相手方職業',
+      '相手方年齢',
+      '販売日',
+      '販売価格',
+      '販売先',
+      '販売先住所',
+      '状態'
+    ];
+
+    // 数値や日付をエスケープする関数
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      // カンマ、ダブルクォート、改行を含む場合はクォートで囲む
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    // データ行の生成
+    const rows = records.map(record => {
+      // 価格データを数値として取得（recordオブジェクトから直接取得）
+      const priceValue = record.price || 0;
+      const salePriceValue = (record.salePrice === '-' || record.salePrice === undefined || record.salePrice === null) 
+        ? '' 
+        : (typeof record.salePrice === 'number' ? record.salePrice : parseFloat(String(record.salePrice).replace(/¥|,/g, '')) || '');
+      
+      return [
+        record.date || '',
+        record.type || '',
+        record.sku || '',
+        record.managementNumber || '',
+        record.productName || '',
+        record.features || '',
+        record.rank || '',
+        record.quantity || 0,
+        priceValue,
+        record.customerName || '',
+        record.customerAddress || '',
+        record.customerOccupation || '',
+        record.customerAge || '',
+        record.saleDate || '',
+        salePriceValue,
+        record.buyer || '',
+        record.buyerAddress || '',
+        record.status || ''
+      ].map(escapeCSV).join(',');
+    });
+
+    // BOM付きUTF-8でCSVを生成（Excelで正しく開けるように）
+    const csv = '\ufeff' + [headers.map(escapeCSV).join(','), ...rows].join('\n');
+    
+    // ファイル名を生成（現在の日付を含む）
+    const filename = `古物台帳_${new Date().toISOString().split('T')[0]}.csv`;
+    
+    // CSVをダウンロード
+    exportToCSV(csv, filename);
   };
 
   const getStatusBadge = (status) => {
@@ -395,11 +474,6 @@ const Ledger = () => {
     <div className="ledger-container">
       <h1>個別管理台帳（古物台帳）</h1>
       <p className="subtitle">古物営業法に基づく取引記録の管理</p>
-
-      <div className="law-notice">
-        <h3>⚖️ 古物営業法対応</h3>
-        <p>この台帳は古物営業法第16条に基づく帳簿として管理されています。必須記載事項：取引年月日、品目、特徴、数量、代価、相手方の住所・氏名・職業・年齢</p>
-      </div>
 
       <div className="search-section">
         <h3>検索条件</h3>
@@ -497,9 +571,6 @@ const Ledger = () => {
             <span className="record-count">全{records.length}件</span>
           </div>
           <div className="right-actions">
-            <button onClick={cleanupDuplicateRecords} style={{backgroundColor: '#ff6b6b', color: 'white'}}>
-              重複クリーンアップ
-            </button>
             <button onClick={clearAllRecords} style={{backgroundColor: '#dc3545', color: 'white'}}>
               🗑️ 全記録クリア
             </button>
@@ -675,6 +746,11 @@ const Ledger = () => {
               </div>
             </div>
           )}
+      </div>
+
+      <div className="law-notice">
+        <h3>⚖️ 古物営業法対応</h3>
+        <p>この台帳は古物営業法第16条に基づく帳簿として管理されています。必須記載事項：取引年月日、品目、特徴、数量、代価、相手方の住所・氏名・職業・年齢</p>
       </div>
     </div>
   );

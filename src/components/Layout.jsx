@@ -126,24 +126,40 @@ const Layout = ({ children }) => {
                     )}
                   </button>
                   {openDropdown === 'business' && (
-                    <div className="dropdown-content">
+                    <div className="dropdown-content business-dropdown">
                       <Link to="/rating" className={isActive('/rating') ? 'active' : ''}>
-                        買取査定
-                        {pendingEstimatesCount > 0 && (
-                          <span className="notification-badge-small">{pendingEstimatesCount}</span>
-                        )}
+                        <div className="settings-item">
+                          <span className="settings-item-title">
+                            💰 買取査定
+                            {pendingEstimatesCount > 0 && (
+                              <span className="notification-badge-small">{pendingEstimatesCount}</span>
+                            )}
+                          </span>
+                          <span className="settings-item-desc">顧客からの買取申請を査定・承認</span>
+                        </div>
                       </Link>
                       <Link to="/sales" className={isActive('/sales') ? 'active' : ''}>
-                        販売管理
-                        {pendingSalesCount > 0 && (
-                          <span className="notification-badge-small">{pendingSalesCount}</span>
-                        )}
+                        <div className="settings-item">
+                          <span className="settings-item-title">
+                            💼 販売管理
+                            {pendingSalesCount > 0 && (
+                              <span className="notification-badge-small">{pendingSalesCount}</span>
+                            )}
+                          </span>
+                          <span className="settings-item-desc">販売処理と見積もり作成</span>
+                        </div>
                       </Link>
                       <Link to="/inventory" className={isActive('/inventory') ? 'active' : ''}>
-                        在庫管理
+                        <div className="settings-item">
+                          <span className="settings-item-title">📦 在庫管理</span>
+                          <span className="settings-item-desc">在庫の確認と管理</span>
+                        </div>
                       </Link>
                       <Link to="/ledger" className={isActive('/ledger') ? 'active' : ''}>
-                        古物台帳
+                        <div className="settings-item">
+                          <span className="settings-item-title">📋 古物台帳</span>
+                          <span className="settings-item-desc">古物営業法に基づく台帳管理</span>
+                        </div>
                       </Link>
                     </div>
                   )}
@@ -165,12 +181,18 @@ const Layout = ({ children }) => {
                     📊 分析 ▼
                   </button>
                   {openDropdown === 'analytics' && (
-                    <div className="dropdown-content">
+                    <div className="dropdown-content analytics-dropdown">
                       <Link to="/dashboard" className={isActive('/dashboard') ? 'active' : ''}>
-                        ダッシュボード
+                        <div className="settings-item">
+                          <span className="settings-item-title">📊 ダッシュボード</span>
+                          <span className="settings-item-desc">売上・買取の概要を確認</span>
+                        </div>
                       </Link>
                       <Link to="/sales-analytics" className={isActive('/sales-analytics') ? 'active' : ''}>
-                        販売分析
+                        <div className="settings-item">
+                          <span className="settings-item-title">📈 販売分析</span>
+                          <span className="settings-item-desc">販売データの詳細分析</span>
+                        </div>
                       </Link>
                     </div>
                   )}
@@ -188,25 +210,54 @@ const Layout = ({ children }) => {
                     ⚙️ 設定 ▼
                   </button>
                   {openDropdown === 'settings' && (
-                    <div className="dropdown-content">
-                      <Link to="/sys/admin/pricing-management" className={isActive('/sys/admin/pricing-management') ? 'active' : ''}>
-                        💰 価格管理
-                      </Link>
-                      <Link to="/sys/admin/staff-management" className={isActive('/sys/admin/staff-management') ? 'active' : ''}>
-                        👥 スタッフ管理
-                      </Link>
-                      <Link to="/sys/admin/product-management" className={isActive('/sys/admin/product-management') ? 'active' : ''}>
-                        🎮 商品マスタ
-                      </Link>
-                      <Link to="/sys/admin/user-management" className={isActive('/sys/admin/user-management') ? 'active' : ''}>
-                        👤 ユーザー管理
-                      </Link>
-                      <Link to="/settings/zaico-sync" className={isActive('/settings/zaico-sync') ? 'active' : ''}>
-                        🔄 Zaico同期管理
-                      </Link>
-                      <Link to="/settings/color-library" className={isActive('/settings/color-library') ? 'active' : ''}>
-                        🎨 カラーライブラリ
-                      </Link>
+                    <div className="dropdown-content settings-dropdown">
+                      <div className="settings-category">
+                        <div className="settings-category-title">📊 マスタ管理</div>
+                        <Link to="/sys/admin/pricing-management" className={isActive('/sys/admin/pricing-management') ? 'active' : ''}>
+                          <div className="settings-item">
+                            <span className="settings-item-title">💰 価格管理</span>
+                            <span className="settings-item-desc">商品の買取価格を設定</span>
+                          </div>
+                        </Link>
+                        <Link to="/sys/admin/product-management" className={isActive('/sys/admin/product-management') ? 'active' : ''}>
+                          <div className="settings-item">
+                            <span className="settings-item-title">🎮 商品マスタ</span>
+                            <span className="settings-item-desc">機種やソフトの情報を管理</span>
+                          </div>
+                        </Link>
+                        <Link to="/settings/color-library" className={isActive('/settings/color-library') ? 'active' : ''}>
+                          <div className="settings-item">
+                            <span className="settings-item-title">🎨 カラーライブラリ</span>
+                            <span className="settings-item-desc">商品のカラー情報を管理</span>
+                          </div>
+                        </Link>
+                      </div>
+                      
+                      <div className="settings-category">
+                        <div className="settings-category-title">👥 ユーザー・アカウント</div>
+                        <Link to="/sys/admin/user-management" className={isActive('/sys/admin/user-management') ? 'active' : ''}>
+                          <div className="settings-item">
+                            <span className="settings-item-title">👤 ユーザー管理</span>
+                            <span className="settings-item-desc">顧客アカウントを管理</span>
+                          </div>
+                        </Link>
+                        <Link to="/sys/admin/staff-management" className={isActive('/sys/admin/staff-management') ? 'active' : ''}>
+                          <div className="settings-item">
+                            <span className="settings-item-title">👥 スタッフ管理</span>
+                            <span className="settings-item-desc">スタッフアカウントを管理</span>
+                          </div>
+                        </Link>
+                      </div>
+                      
+                      <div className="settings-category">
+                        <div className="settings-category-title">🔧 システム連携</div>
+                        <Link to="/settings/zaico-sync" className={isActive('/settings/zaico-sync') ? 'active' : ''}>
+                          <div className="settings-item">
+                            <span className="settings-item-title">🔄 Zaico同期管理</span>
+                            <span className="settings-item-desc">Zaicoとの在庫同期を管理</span>
+                          </div>
+                        </Link>
+                      </div>
                     </div>
                   )}
                 </div>
