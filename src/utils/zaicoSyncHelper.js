@@ -83,22 +83,22 @@ export const syncZaicoToProject = async (dateRange = null) => {
   try {
     console.log('=== Zaico → プロジェクト同期開始 ===');
     if (dateRange && dateRange.startDate && dateRange.endDate) {
-      console.log(`フィルタリング条件: 在庫数量1以上、日付範囲: ${dateRange.startDate} 〜 ${dateRange.endDate}`);
+      console.log(`フィルタリング条件: 在庫数量1以上（0以下は除外）、日付範囲: ${dateRange.startDate} 〜 ${dateRange.endDate}`);
     } else {
-      console.log('フィルタリング条件: 在庫数量1以上');
+      console.log('フィルタリング条件: 在庫数量1以上（0以下は除外）');
     }
     
     // zaicoの在庫データを全件取得（ページネーション対応）
     const zaicoInventory = await getInventoriesFromZaico();
     console.log('zaico在庫数（フィルタリング前）:', zaicoInventory.length);
     
-    // フィルタリング: 数量0のものは除外、数量1以上のものは取り込み対象
+    // フィルタリング: 数量0以下のものは除外、数量1以上のものは取り込み対象
     let filteredZaicoInventory = zaicoInventory.filter(zaicoItem => {
       const quantity = parseInt(zaicoItem.quantity) || 0;
       
-      // 数量0のものは除外
-      if (quantity === 0) {
-        console.log(`数量0のため除外: ${zaicoItem.title} (zaicoId: ${zaicoItem.id})`);
+      // 数量0以下のもの（0と負の値）は除外
+      if (quantity <= 0) {
+        console.log(`数量${quantity}のため除外: ${zaicoItem.title} (zaicoId: ${zaicoItem.id})`);
         return false;
       }
       

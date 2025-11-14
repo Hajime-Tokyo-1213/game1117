@@ -97,8 +97,12 @@ const Dashboard = () => {
           return appDate >= new Date(startDate) && appDate <= new Date(endDate);
         });
         
-        // 在庫データから買取記録を取得
+        // 在庫データから買取記録を取得（数量が0以下のものは除外）
         filteredInventory = inventory.filter(inv => {
+          const quantity = parseInt(inv.quantity) || 0;
+          if (quantity <= 0) {
+            return false;
+          }
           if ((inv.sourceType === 'customer' || inv.sourceType === 'zaico_import') && inv.registeredDate) {
             const invDate = new Date(inv.registeredDate);
             return invDate >= new Date(startDate) && invDate <= new Date(endDate);
@@ -121,8 +125,12 @@ const Dashboard = () => {
           return appDate >= firstDay && appDate <= lastDay;
         });
         
-        // 在庫データから買取記録を取得
+        // 在庫データから買取記録を取得（数量が0以下のものは除外）
         filteredInventory = inventory.filter(inv => {
+          const quantity = parseInt(inv.quantity) || 0;
+          if (quantity <= 0) {
+            return false;
+          }
           if ((inv.sourceType === 'customer' || inv.sourceType === 'zaico_import') && inv.registeredDate) {
             const invDate = new Date(inv.registeredDate);
             return invDate >= firstDay && invDate <= lastDay;
@@ -146,10 +154,13 @@ const Dashboard = () => {
         return sum + (app.totalEstimate || 0);
       }, 0);
       
-      // 在庫データから買取金額を追加
+      // 在庫データから買取金額を追加（数量が0以下のものは除外）
       const inventoryPurchases = filteredInventory.reduce((sum, inv) => {
+        const quantity = parseInt(inv.quantity) || 0;
+        if (quantity <= 0) {
+          return sum;
+        }
         const buybackPrice = inv.acquisitionPrice || inv.buybackPrice || 0;
-        const quantity = inv.quantity || 1;
         return sum + (buybackPrice * quantity);
       }, 0);
       
@@ -250,12 +261,15 @@ const Dashboard = () => {
       }
     });
     
-    // 在庫データから買取金額を追加
+    // 在庫データから買取金額を追加（数量が0以下のものは除外）
     inventory.forEach(inv => {
       if ((inv.sourceType === 'customer' || inv.sourceType === 'zaico_import') && inv.registeredDate) {
+        const quantity = parseInt(inv.quantity) || 0;
+        if (quantity <= 0) {
+          return;
+        }
         const month = new Date(inv.registeredDate).getMonth();
         const buybackPrice = inv.acquisitionPrice || inv.buybackPrice || 0;
-        const quantity = inv.quantity || 1;
         purchaseData[month] += buybackPrice * quantity;
       }
     });
@@ -402,15 +416,18 @@ const Dashboard = () => {
       }
     });
     
-    // 在庫データから買取金額を追加
+    // 在庫データから買取金額を追加（数量が0以下のものは除外）
     inventory.forEach(inv => {
       if ((inv.sourceType === 'customer' || inv.sourceType === 'zaico_import') && inv.registeredDate) {
+        const quantity = parseInt(inv.quantity) || 0;
+        if (quantity <= 0) {
+          return;
+        }
         const invDate = new Date(inv.registeredDate);
         if (invDate.getMonth() === currentMonth && invDate.getFullYear() === currentYear) {
           const day = invDate.getDate() - 1;
           if (day >= 0 && day < daysInMonth) {
             const buybackPrice = inv.acquisitionPrice || inv.buybackPrice || 0;
-            const quantity = inv.quantity || 1;
             dailyPurchases[day] += buybackPrice * quantity;
           }
         }

@@ -279,6 +279,12 @@ export const migrateLegacyLedgerData = () => {
   }
 
   inventory.forEach(item => {
+    // 数量が0以下のものは除外（0と負の値）
+    const quantity = parseInt(item.quantity) || 0;
+    if (quantity <= 0) {
+      return;
+    }
+    
     // Zaicoから同期した在庫の場合、zaicoOriginalDateを使用（なければregisteredDateを使用）
     let eventDate = item.registeredDate || new Date().toISOString();
     if (item.sourceType === 'zaico_import' && item.zaicoOriginalDate) {
@@ -287,7 +293,7 @@ export const migrateLegacyLedgerData = () => {
     
     recordLedgerPurchase({
       inventoryItem: item,
-      quantity: item.quantity || 0,
+      quantity: quantity,
       unitPriceJPY: item.acquisitionPrice || item.buybackPrice || 0,
       eventDate: eventDate,
       performer: 'import',
