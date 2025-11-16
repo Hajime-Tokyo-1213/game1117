@@ -23,3 +23,20 @@ pnpm-debug.log*
 # Misc caches
 .cache/
 coverage/
+
+# Test files
+*Test.js
+*Test.jsx
+*_test.js
+*_test.jsx
+
+# Backup files
+*.backup.js
+*.backup.jsx
+*_old.js
+*_old.jsx
+*_deprecated.js
+*_deprecated.jsx
+
+# Temporary files
+* 2.jsx

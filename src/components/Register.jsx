@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { validatePassword } from '../utils/passwordHash';
 import './Register.css';
 
 const Register = () => {
@@ -18,6 +19,8 @@ const Register = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState({ score: 0, message: '' });
+  const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
   
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -28,6 +31,42 @@ const Register = () => {
       ...prev,
       [name]: value
     }));
+
+    // パスワード強度をリアルタイムチェック
+    if (name === 'password') {
+      checkPasswordStrength(value);
+    }
+  };
+
+  // パスワード強度チェック関数
+  const checkPasswordStrength = (password) => {
+    if (!password) {
+      setPasswordStrength({ score: 0, message: '' });
+      return;
+    }
+
+    const validation = validatePassword(password);
+    let score = 0;
+    let message = '';
+
+    if (password.length >= 8) score++;
+    if (password.length >= 12) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[a-z]/.test(password)) score++;
+    if (/\d/.test(password)) score++;
+    if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
+
+    if (!validation.isValid) {
+      message = '弱い';
+    } else if (score <= 2) {
+      message = '弱い';
+    } else if (score <= 4) {
+      message = '普通';
+    } else {
+      message = '強い';
+    }
+
+    setPasswordStrength({ score, message });
   };
 
   // 郵便番号から住所を自動入力
@@ -109,9 +148,10 @@ const Register = () => {
       return false;
     }
 
-    // パスワードの長さチェック
-    if (formData.password.length < 6) {
-      setError('パスワードは6文字以上で入力してください');
+    // パスワードのバリデーション
+    const passwordValidation = validatePassword(formData.password);
+    if (!passwordValidation.isValid) {
+      setError(`パスワードが要件を満たしていません: ${passwordValidation.errors.join(', ')}`);
       return false;
     }
 
@@ -136,16 +176,22 @@ const Register = () => {
 
     try {
       const { confirmPassword, ...userData } = formData;
-      const result = register(userData);
+      const result = await register(userData);
       
       if (result.success) {
-        alert('会員登録が完了しました。ログインしてください。');
-        navigate('/login');
+        // 登録完了メッセージとセキュリティ情報
+        navigate('/login', {
+          state: { 
+            message: '会員登録が完了しました。セキュリティ強化のため、パスワードは暗号化されて保存されています。',
+            email: userData.email
+          }
+        });
       } else {
         setError(result.error);
       }
     } catch (err) {
-      setError('登録処理中にエラーが発生しました');
+      console.error('登録エラー:', err);
+      setError('登録処理中にエラーが発生しました。もう一度お試しください。');
     } finally {
       setLoading(false);
     }
@@ -276,17 +322,45 @@ const Register = () => {
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="password">パスワード *</label>
+              <label htmlFor="password">
+                パスワード *
+                {formData.password && (
+                  <span className={`password-strength strength-${passwordStrength.message.toLowerCase()}`}>
+                    {' '}（強度: {passwordStrength.message}）
+                  </span>
+                )}
+              </label>
               <input
                 type="password"
                 id="password"
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                placeholder="6文字以上"
+                onFocus={() => setShowPasswordRequirements(true)}
+                onBlur={() => setShowPasswordRequirements(false)}
+                placeholder="8文字以上"
                 disabled={loading}
                 required
               />
+              {showPasswordRequirements && (
+                <div className="password-requirements">
+                  <p>パスワード要件:</p>
+                  <ul>
+                    <li className={formData.password.length >= 8 ? 'satisfied' : ''}>
+                      8文字以上
+                    </li>
+                    <li className={/[A-Z]/.test(formData.password) && /[a-z]/.test(formData.password) ? 'satisfied' : ''}>
+                      大文字と小文字を含む
+                    </li>
+                    <li className={/\d/.test(formData.password) ? 'satisfied' : ''}>
+                      数字を含む
+                    </li>
+                    <li className={/[!@#$%^&*(),.?":{}|<>]/.test(formData.password) ? 'satisfied' : ''}>
+                      特殊文字を含む（推奨）
+                    </li>
+                  </ul>
+                </div>
+              )}
             </div>
 
             <div className="form-group">

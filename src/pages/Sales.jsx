@@ -3,7 +3,7 @@ import { manufacturers, colors, gameConsoles } from '../data/gameConsoles';
 import { getAllConsoles } from '../utils/productMaster';
 import { generateProductCode } from '../utils/productCodeGenerator';
 import { calculateBuyerPrice } from '../utils/priceCalculator';
-import { createOutboundItemInZaico, logSyncActivity } from '../utils/zaicoApi';
+import { createOutboundItemInZaico, logSyncActivity } from '../utils/zaicoClient';
 import { recordLedgerSale } from '../utils/ledgerRecords';
 import BuyerSelector from '../components/BuyerSelector';
 import './Sales.css';

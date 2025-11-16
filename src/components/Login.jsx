@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import './Login.css';
 
@@ -8,25 +8,60 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
+
+  // 登録完了後のメッセージ表示
+  useEffect(() => {
+    if (location.state?.message) {
+      setSuccessMessage(location.state.message);
+      if (location.state.email) {
+        setEmail(location.state.email);
+      }
+      // stateをクリア
+      window.history.replaceState({}, document.title);
+    }
+  }, [location]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
     setLoading(true);
 
     try {
-      const result = login(email, password);
+      const result = await login(email, password);
       
       if (result.success) {
-        navigate('/');
+        // パスワード移行が行われた場合のメッセージ表示
+        if (result.migrationPerformed) {
+          console.log('パスワードがセキュアな形式に更新されました');
+          setSuccessMessage('セキュリティ向上のため、パスワードを暗号化しました 🔒');
+          
+          // メッセージを表示してからナビゲート
+          setTimeout(() => {
+            navigate('/');
+          }, 2000);
+        } else {
+          // 通常のログイン成功
+          navigate('/');
+        }
       } else {
-        setError(result.error);
+        // エラーメッセージの改善
+        if (result.error.includes('メールアドレスまたはパスワード')) {
+          setError('メールアドレスまたはパスワードが正しくありません');
+        } else if (result.error.includes('役職')) {
+          setError('このログイン画面は一般ユーザー用です。スタッフの方は専用ログインページをご利用ください');
+        } else {
+          setError(result.error || 'ログインに失敗しました');
+        }
       }
     } catch (err) {
-      setError('ログイン処理中にエラーが発生しました');
+      console.error('ログインエラー:', err);
+      setError('ログイン処理中にエラーが発生しました。しばらくしてから再度お試しください');
     } finally {
       setLoading(false);
     }
@@ -68,6 +103,7 @@ const Login = () => {
           </div>
 
           {error && <div className="error-message">{error}</div>}
+          {successMessage && <div className="success-message">{successMessage}</div>}
 
           <button type="submit" className="login-button" disabled={loading}>
             {loading ? 'ログイン中...' : 'ログイン'}

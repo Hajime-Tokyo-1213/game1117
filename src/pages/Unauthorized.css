@@ -44,3 +44,105 @@
 .back-home:hover {
   background-color: #2980b9;
 }
+
+/* 追加のスタイル */
+.error-details {
+  margin: 30px 0;
+  text-align: left;
+  background-color: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  border-left: 4px solid #e74c3c;
+}
+
+.user-info,
+.required-role-info,
+.allowed-roles-info {
+  margin: 15px 0;
+}
+
+.user-info p,
+.required-role-info p,
+.allowed-roles-info p {
+  margin: 5px 0;
+  font-size: 16px;
+  color: #2c3e50;
+}
+
+.allowed-roles-info ul {
+  list-style-type: none;
+  padding-left: 20px;
+  margin-top: 10px;
+}
+
+.allowed-roles-info li {
+  padding: 5px 0;
+  color: #7f8c8d;
+}
+
+.allowed-roles-info li::before {
+  content: "• ";
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+.actions {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 30px 0;
+}
+
+.btn {
+  padding: 12px 24px;
+  border-radius: 5px;
+  font-size: 16px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background-color: #3498db;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #2980b9;
+}
+
+.btn-secondary {
+  background-color: #95a5a6;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #7f8c8d;
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: #e74c3c;
+  border: 2px solid #e74c3c;
+}
+
+.btn-outline:hover {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.help-text {
+  margin-top: 30px;
+  padding: 15px;
+  background-color: #ecf0f1;
+  border-radius: 5px;
+}
+
+.help-text p {
+  font-size: 14px;
+  color: #7f8c8d;
+  margin: 0;
+  line-height: 1.5;
+}

@@ -1,5 +1,5 @@
 // データクリーンアップユーティリティ
-import zaicoApi from './zaicoApi';
+import zaicoClient from './zaicoClient';
 
 // プロジェクトの在庫データをクリア
 export const clearProjectInventory = () => {
@@ -25,7 +25,7 @@ export const clearZaicoInventory = async () => {
     console.log('=== Zaico在庫データクリア開始 ===');
     
     // Zaicoから在庫データを取得
-    const zaicoInventory = await zaicoApi.getInventoriesFromZaico();
+    const zaicoInventory = await zaicoClient.getInventoriesFromZaico();
     console.log('削除対象の在庫数:', zaicoInventory.length);
     
     let deletedCount = 0;
@@ -34,7 +34,7 @@ export const clearZaicoInventory = async () => {
     // 各在庫データを削除
     for (const item of zaicoInventory) {
       try {
-        await zaicoApi.callZaicoApi(`/inventories/${item.id}`, 'DELETE');
+        await zaicoClient.callZaicoApi(`/inventories/${item.id}`, 'DELETE');
         deletedCount++;
         console.log(`削除完了: ${item.title} (ID: ${item.id})`);
       } catch (error) {

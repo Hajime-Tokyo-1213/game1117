@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { setupFetchInterceptor } from './api/fetchInterceptor';
 import Layout from './components/Layout';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './components/Login';
@@ -249,6 +250,13 @@ function AppContent() {
 }
 
 function App() {
+  // 開発環境でfetchインターセプターを初期化
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      setupFetchInterceptor();
+    }
+  }, []);
+
   return (
     <Router>
       <AuthProvider>

@@ -3,7 +3,7 @@ import {
   getOutboundItemsFromZaico, 
   getOutboundItemDetailsFromZaico,
   logSyncActivity 
-} from '../utils/zaicoApi';
+} from '../utils/zaicoClient';
 import { syncExistingInventoryWithZaico, syncZaicoToProject, checkInventoryZaicoIds } from '../utils/zaicoSyncHelper';
 import { clearProjectInventory, clearZaicoInventory, clearAllData, confirmDataClear } from '../utils/dataCleaner';
 import './ZaicoSyncManager.css';

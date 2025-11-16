@@ -78,6 +78,28 @@
   border: 1px solid #fcc;
 }
 
+.success-message {
+  background-color: #d4edda;
+  color: #155724;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+  font-size: 14px;
+  border: 1px solid #c3e6cb;
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .login-button {
   width: 100%;
   background-color: #667eea;
@@ -241,4 +263,261 @@
 
 .login-button.staff-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, #2c2c2c 0%, #000000 100%);
+}
+
+/* ブロックタイマー表示 */
+.block-timer {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  text-align: center;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.block-timer p {
+  margin: 5px 0;
+  color: #856404;
+}
+
+.block-timer p:first-child {
+  font-weight: bold;
+}
+
+.block-timer p:last-child {
+  font-size: 18px;
+  color: #e74c3c;
+  font-weight: bold;
+  font-family: monospace;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* セキュリティ案内ボックス */
+.security-info-box {
+  margin-top: 30px;
+  padding: 20px;
+  background-color: #f0f4ff;
+  border: 1px solid #d0d9ff;
+  border-radius: 10px;
+}
+
+.security-info-box h3 {
+  margin: 0 0 15px 0;
+  color: #2c3e50;
+  font-size: 18px;
+}
+
+.security-info-box > p {
+  margin: 0 0 15px 0;
+  color: #555;
+  line-height: 1.6;
+}
+
+.security-info-box ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0 0 20px 0;
+}
+
+.security-info-box ul li {
+  padding: 5px 0;
+  padding-left: 25px;
+  position: relative;
+  color: #555;
+}
+
+.security-info-box ul li:before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: #27ae60;
+  font-weight: bold;
+}
+
+.security-tips {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px dashed #d0d9ff;
+}
+
+.security-tips p {
+  margin: 0 0 10px 0;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.security-tips ul li:before {
+  content: '•';
+  color: #667eea;
+}
+
+/* セキュリティモーダル */
+.security-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.security-modal {
+  background: white;
+  border-radius: 15px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  animation: slideIn 0.3s ease-out;
+  overflow: hidden;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.security-modal-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+  text-align: center;
+}
+
+.security-modal-header h2 {
+  margin: 0;
+  color: white;
+  font-size: 24px;
+}
+
+.security-modal-body {
+  padding: 30px;
+}
+
+.security-modal-body > p {
+  margin: 0 0 20px 0;
+  text-align: center;
+  color: #555;
+  font-size: 16px;
+}
+
+.password-strength-report {
+  background-color: #f8f9fa;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.password-strength-report h3 {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  color: #2c3e50;
+}
+
+.strength-indicator {
+  height: 20px;
+  background-color: #e9ecef;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.strength-bar {
+  height: 100%;
+  background: linear-gradient(to right, #e74c3c, #f39c12, #27ae60);
+  transition: width 0.5s ease-out;
+}
+
+.strength-level {
+  text-align: center;
+  font-weight: bold;
+  margin: 10px 0;
+}
+
+.strength-弱い { color: #e74c3c; }
+.strength-普通 { color: #f39c12; }
+.strength-強い { color: #3498db; }
+.strength-非常に強い { color: #27ae60; }
+
+.strength-feedback {
+  list-style: none;
+  padding-left: 0;
+  margin: 10px 0 0 0;
+}
+
+.strength-feedback li {
+  color: #27ae60;
+  padding: 3px 0;
+  font-size: 14px;
+}
+
+.security-benefits {
+  margin: 20px 0;
+}
+
+.security-benefits h3 {
+  margin: 0 0 10px 0;
+  font-size: 16px;
+  color: #2c3e50;
+}
+
+.security-benefits ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.security-benefits ul li {
+  padding: 8px 0;
+  font-size: 15px;
+  color: #555;
+}
+
+.auto-redirect {
+  text-align: center;
+  color: #7f8c8d;
+  font-size: 14px;
+  font-style: italic;
+  margin-top: 20px;
+}
+
+.security-modal-footer {
+  padding: 20px;
+  background-color: #f8f9fa;
+  text-align: center;
+}
+
+.security-modal-footer button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 30px;
+  border-radius: 25px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.security-modal-footer button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
 }

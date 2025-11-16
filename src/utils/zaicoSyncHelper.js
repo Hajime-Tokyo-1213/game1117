@@ -1,5 +1,5 @@
 // Zaico同期ヘルパー関数
-import { getInventoriesFromZaico, logSyncActivity, getStocktakeHistoryFromZaico } from './zaicoApi';
+import { getInventoriesFromZaico, logSyncActivity, getStocktakeHistoryFromZaico } from './zaicoClient';
 
 // 既存在庫をZaicoと同期
 export const syncExistingInventoryWithZaico = async () => {

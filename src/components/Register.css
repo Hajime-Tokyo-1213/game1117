@@ -122,6 +122,70 @@
   border: 1px solid #fcc;
 }
 
+/* パスワード強度インジケーター */
+.password-strength {
+  font-size: 12px;
+  font-weight: normal;
+  margin-left: 10px;
+}
+
+.password-strength.strength-弱い {
+  color: #e74c3c;
+}
+
+.password-strength.strength-普通 {
+  color: #f39c12;
+}
+
+.password-strength.strength-強い {
+  color: #27ae60;
+}
+
+/* パスワード要件表示 */
+.password-requirements {
+  margin-top: 10px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 5px;
+  border: 1px solid #e9ecef;
+  font-size: 13px;
+}
+
+.password-requirements p {
+  margin: 0 0 8px 0;
+  font-weight: bold;
+  color: #495057;
+}
+
+.password-requirements ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.password-requirements li {
+  padding: 4px 0;
+  padding-left: 20px;
+  position: relative;
+  color: #6c757d;
+}
+
+.password-requirements li:before {
+  content: '○';
+  position: absolute;
+  left: 0;
+  color: #e74c3c;
+}
+
+.password-requirements li.satisfied {
+  color: #212529;
+}
+
+.password-requirements li.satisfied:before {
+  content: '✓';
+  color: #27ae60;
+}
+
 .register-button {
   width: 100%;
   background-color: #667eea;

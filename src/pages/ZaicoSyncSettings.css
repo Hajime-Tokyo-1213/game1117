@@ -50,6 +50,182 @@
   font-weight: 600;
 }
 
+/* API状態表示用のスタイル */
+.api-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+
+.api-status.configured {
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+}
+
+.api-status.not-configured {
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+}
+
+.api-status.checking {
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  color: #856404;
+}
+
+.api-status .status-icon {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.api-status .status-text {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.api-status .status-message {
+  font-size: 0.9rem;
+  margin: 5px 0 0 0;
+  opacity: 0.8;
+}
+
+.refresh-btn {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-top: 10px;
+  transition: background-color 0.3s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background-color: #5a6268;
+}
+
+.refresh-btn:disabled {
+  background-color: #6c757d;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.info-text {
+  background-color: #e9ecef;
+  padding: 15px;
+  border-radius: 6px;
+  margin-top: 15px;
+}
+
+.info-text p {
+  margin: 5px 0;
+  font-size: 0.9rem;
+  color: #495057;
+}
+
+.info-text strong {
+  color: #343a40;
+}
+
+/* 管理者情報カード */
+.admin-info-card {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f1f8e9 100%);
+  border: 2px solid #2196f3;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 25px;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15);
+}
+
+.admin-info-card h3 {
+  color: #1976d2;
+  margin: 0 0 15px 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.info-content p {
+  margin: 8px 0;
+  line-height: 1.5;
+  color: #424242;
+  font-size: 0.95rem;
+}
+
+.info-content strong {
+  color: #1976d2;
+  font-weight: 600;
+}
+
+/* 同期設定ラベルの改善 */
+.sync-setting-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin: 10px 0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background-color: #fafafa;
+}
+
+.sync-setting-label:hover {
+  background-color: #f0f0f0;
+  border-color: #2196f3;
+}
+
+.sync-setting-label input[type="checkbox"] {
+  margin: 0;
+  margin-top: 2px;
+  transform: scale(1.2);
+}
+
+.sync-setting-label input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.setting-details {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.setting-title {
+  font-weight: 600;
+  color: #333;
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.setting-description {
+  font-size: 0.875rem;
+  color: #666;
+  line-height: 1.4;
+}
+
+/* 無効化された設定項目のスタイル */
+.sync-setting-label:has(input:disabled) {
+  opacity: 0.6;
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.sync-setting-label:has(input:disabled) .setting-title {
+  color: #999;
+}
+
+.sync-setting-label:has(input:disabled) .setting-description {
+  color: #aaa;
+}
+
 .tab-content {
   min-height: 500px;
 }

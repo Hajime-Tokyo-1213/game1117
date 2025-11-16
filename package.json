@@ -2,6 +2,7 @@
   "name": "game-buyback-system",
   "version": "1.0.0",
   "description": "中古ゲーム機買取・在庫管理システム",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "dev": "vite",
@@ -9,11 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.0",
+    "bcryptjs": "^2.4.3",
     "chart.js": "^4.4.0",
-    "react-chartjs-2": "^5.2.0"
+    "js-cookie": "^3.0.5",
+    "react": "^18.2.0",
+    "react-chartjs-2": "^5.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",

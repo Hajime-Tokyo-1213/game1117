@@ -1,29 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ZaicoSyncManager from '../components/ZaicoSyncManager';
-import { callZaicoApi } from '../utils/zaicoApi';
 import './ZaicoSyncSettings.css';
 
 const ZaicoSyncSettings = () => {
   const [activeTab, setActiveTab] = useState('sync');
   const navigate = useNavigate();
   
-  // APIキー設定の状態
-  const [apiKey, setApiKey] = useState('');
-  const [connectionStatus, setConnectionStatus] = useState('未接続');
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [buybackSyncEnabled, setBuybackSyncEnabled] = useState(true);
   const [salesSyncEnabled, setSalesSyncEnabled] = useState(true);
 
-  // コンポーネントマウント時に保存された設定を読み込み
+  // コンポーネントマウント時に設定を読み込み
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('zaicoApiKey');
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
-      setConnectionStatus('設定済み');
-    }
-    
     // 同期設定の読み込み
     const savedAutoSync = localStorage.getItem('zaicoAutoSync');
     const savedBuybackSync = localStorage.getItem('zaicoBuybackSync');
@@ -33,67 +22,6 @@ const ZaicoSyncSettings = () => {
     if (savedBuybackSync !== null) setBuybackSyncEnabled(savedBuybackSync === 'true');
     if (savedSalesSync !== null) setSalesSyncEnabled(savedSalesSync === 'true');
   }, []);
-
-  // APIキー保存
-  const handleSaveApiKey = () => {
-    if (!apiKey.trim()) {
-      alert('APIキーを入力してください');
-      return;
-    }
-    
-    localStorage.setItem('zaicoApiKey', apiKey);
-    setConnectionStatus('保存済み');
-    alert('APIキーを保存しました');
-  };
-
-  // 接続テスト
-  const handleTestConnection = async () => {
-    if (!apiKey.trim()) {
-      alert('APIキーを入力してください');
-      return;
-    }
-
-    setIsTestingConnection(true);
-    setConnectionStatus('テスト中...');
-
-    try {
-      // 一時的にAPIキーを設定してテスト
-      const originalApiKey = localStorage.getItem('zaicoApiKey');
-      localStorage.setItem('zaicoApiKey', apiKey);
-      
-      // 簡単なAPI呼び出しでテスト
-      await callZaicoApi('/inventories?page=1&per_page=1');
-      
-      setConnectionStatus('接続成功');
-      alert('Zaico APIへの接続に成功しました！');
-      
-      // 元のAPIキーを復元
-      if (originalApiKey) {
-        localStorage.setItem('zaicoApiKey', originalApiKey);
-      }
-    } catch (error) {
-      console.error('接続テストエラー:', error);
-      setConnectionStatus('接続失敗');
-      
-      // エラーメッセージを詳細に表示
-      let errorMessage = `接続に失敗しました: ${error.message}`;
-      
-      if (error.message.includes('API レスポンスがJSON形式ではありません')) {
-        errorMessage += '\n\n🔍 問題: APIがHTMLエラーページを返しています\n';
-        errorMessage += '📋 解決方法: APIキーまたはエンドポイントURLを確認してください';
-      } else if (error.message.includes('HTTP error! status: 401')) {
-        errorMessage += '\n\n🔑 問題: 認証に失敗しました\n';
-        errorMessage += '📋 解決方法: APIキーが正しいか確認してください';
-      } else if (error.message.includes('HTTP error! status: 404')) {
-        errorMessage += '\n\n🌐 問題: APIエンドポイントが見つかりません\n';
-        errorMessage += '📋 解決方法: APIのベースURLを確認してください';
-      }
-      
-      alert(errorMessage);
-    } finally {
-      setIsTestingConnection(false);
-    }
-  };
 
   // 同期設定保存
   const handleSaveSyncSettings = () => {
@@ -143,67 +71,58 @@ const ZaicoSyncSettings = () => {
 
         {activeTab === 'settings' && (
           <div className="settings-section">
-            <div className="settings-card">
-              <h3>API設定</h3>
-              <div className="setting-item">
-                <label>Zaico APIキー</label>
-                <input 
-                  type="password" 
-                  placeholder="APIキーを入力してください"
-                  className="api-key-input"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
-                <button className="save-btn" onClick={handleSaveApiKey}>保存</button>
-              </div>
-              
-              <div className="setting-item">
-                <label>接続テスト</label>
-                <button 
-                  className="test-btn" 
-                  onClick={handleTestConnection}
-                  disabled={isTestingConnection}
-                >
-                  {isTestingConnection ? 'テスト中...' : '接続テスト'}
-                </button>
-                <span className={`connection-status ${connectionStatus === '接続成功' ? 'connected' : ''}`}>
-                  {connectionStatus}
-                </span>
+            <div className="admin-info-card">
+              <h3>🔧 管理者向け情報</h3>
+              <div className="info-content">
+                <p><strong>Zaico API接続設定:</strong> APIキーはサーバー側で管理されており、この画面では同期動作の設定のみ行えます。</p>
+                <p><strong>API設定の変更:</strong> APIキーの設定や変更については、システム管理者またはサーバー管理者にお問い合わせください。</p>
+                <p><strong>設定範囲:</strong> ここでは買取・販売時の自動同期機能の有効/無効を設定できます。</p>
               </div>
             </div>
 
             <div className="settings-card">
-              <h3>同期設定</h3>
+              <h3>同期動作設定</h3>
               <div className="setting-item">
-                <label>
+                <label className="sync-setting-label">
                   <input 
                     type="checkbox" 
                     checked={autoSyncEnabled}
                     onChange={(e) => setAutoSyncEnabled(e.target.checked)}
                   />
-                  自動同期を有効にする
+                  <div className="setting-details">
+                    <span className="setting-title">自動同期を有効にする</span>
+                    <span className="setting-description">全般的な自動同期機能のマスタースイッチです</span>
+                  </div>
                 </label>
               </div>
               
               <div className="setting-item">
-                <label>
+                <label className="sync-setting-label">
                   <input 
                     type="checkbox" 
                     checked={buybackSyncEnabled}
                     onChange={(e) => setBuybackSyncEnabled(e.target.checked)}
+                    disabled={!autoSyncEnabled}
                   />
-                  買取時の自動同期
+                  <div className="setting-details">
+                    <span className="setting-title">買取時の自動同期</span>
+                    <span className="setting-description">商品買取時に自動的にZaicoに在庫情報を送信します</span>
+                  </div>
                 </label>
               </div>
               
               <div className="setting-item">
-                <label>
+                <label className="sync-setting-label">
                   <input 
                     type="checkbox" 
                     checked={salesSyncEnabled}
                     onChange={(e) => setSalesSyncEnabled(e.target.checked)}
+                    disabled={!autoSyncEnabled}
                   />
-                  販売時の自動同期
+                  <div className="setting-details">
+                    <span className="setting-title">販売時の自動同期</span>
+                    <span className="setting-description">商品販売時に自動的にZaicoから在庫を減算します</span>
+                  </div>
                 </label>
               </div>
               

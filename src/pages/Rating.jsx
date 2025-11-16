@@ -3,7 +3,7 @@ import { manufacturers, colors, conditions, accessories } from '../data/gameCons
 import { getAllConsoles } from '../utils/productMaster';
 import { generateManagementNumber, generateProductCode } from '../utils/productCodeGenerator';
 import { getBuybackBasePrice } from '../utils/priceCalculator';
-import { createInventoryInZaico, createPurchaseInZaico, logSyncActivity } from '../utils/zaicoApi';
+import { createInventoryInZaico, createPurchaseInZaico, logSyncActivity } from '../utils/zaicoClient';
 import { recordLedgerPurchase } from '../utils/ledgerRecords';
 import './Rating.css';
 

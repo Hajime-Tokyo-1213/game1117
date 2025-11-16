@@ -1,5 +1,5 @@
 // zaico連携機能のテスト用ユーティリティ
-import { createInventoryInZaico, getInventoriesFromZaico, updateInventoryInZaico, logSyncActivity } from './zaicoApi';
+import { createInventoryInZaico, getInventoriesFromZaico, updateInventoryInZaico, logSyncActivity } from './zaicoClient';
 
 // テスト用の在庫データ
 const testInventoryItem = {
