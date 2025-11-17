@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { validateAndSanitize, validators } from '../utils/validation';
 import { manufacturers, colors, gameConsoles } from '../data/gameConsoles';
 import { getAllConsoles } from '../utils/productMaster';
 import { generateProductCode } from '../utils/productCodeGenerator';
@@ -97,6 +98,67 @@ const Sales = () => {
   const [currentManagementNumbers, setCurrentManagementNumbers] = useState([]);
   const [currentItemInfo, setCurrentItemInfo] = useState(null);
   
+  // Validation states
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
+
+  // Validate sales form
+  const validateSalesForm = async () => {
+    const validations = [];
+    
+    // Validate price inputs
+    for (const [itemId, price] of Object.entries(itemPricesUSD)) {
+      if (price !== null && price !== undefined) {
+        const priceStr = price.toString();
+        if (!/^\d+(\.\d{1,2})?$/.test(priceStr) || parseFloat(priceStr) < 0) {
+          setErrors(prev => ({ ...prev, [`price_${itemId}`]: '有効な価格を入力してください' }));
+          validations.push({ isValid: false });
+        } else {
+          validations.push({ isValid: true });
+        }
+      }
+    }
+    
+    // Validate shipping fee
+    if (shippingFeeUSD !== null && shippingFeeUSD !== undefined) {
+      const feeStr = shippingFeeUSD.toString();
+      if (!/^\d+(\.\d{1,2})?$/.test(feeStr) || parseFloat(feeStr) < 0) {
+        setErrors(prev => ({ ...prev, shippingFee: '有効な送料を入力してください' }));
+        validations.push({ isValid: false });
+      } else {
+        validations.push({ isValid: true });
+      }
+    }
+    
+    // Validate tracking number if provided
+    if (trackingNumber) {
+      const trackingValidation = await validateAndSanitize(trackingNumber, 'required');
+      if (!trackingValidation.isValid) {
+        setErrors(prev => ({ ...prev, trackingNumber: '追跡番号が無効です' }));
+      }
+      validations.push(trackingValidation);
+    }
+    
+    // Validate staff name
+    if (salesStaffName) {
+      const staffValidation = await validateAndSanitize(salesStaffName, 'required');
+      if (!staffValidation.isValid) {
+        setErrors(prev => ({ ...prev, salesStaffName: '担当者名を選択してください' }));
+      }
+      validations.push(staffValidation);
+    }
+    
+    return {
+      validations,
+      hasErrors: validations.some(v => !v.isValid)
+    };
+  };
+
+  // Handle field blur
+  const handleFieldBlur = (fieldName) => {
+    setTouched(prev => ({ ...prev, [fieldName]: true }));
+  };
+
   // 価格計算情報の表示
   const [priceCalculations, setPriceCalculations] = useState({});
 

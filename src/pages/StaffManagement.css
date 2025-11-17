@@ -98,6 +98,20 @@
   cursor: not-allowed;
 }
 
+.staff-form input.error,
+.staff-form select.error {
+  border-color: #e74c3c;
+  background-color: #fff5f5;
+}
+
+.field-error {
+  display: block;
+  color: #e74c3c;
+  font-size: 12px;
+  margin-top: 5px;
+  font-weight: 500;
+}
+
 .form-actions {
   display: flex;
   gap: 15px;

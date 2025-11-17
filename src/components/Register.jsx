@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { validatePassword } from '../utils/passwordHash';
+import { validateAndSanitize, validators } from '../utils/validation';
 import './Register.css';
 
 const Register = () => {
@@ -17,10 +18,12 @@ const Register = () => {
     confirmPassword: ''
   });
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState({ score: 0, message: '' });
   const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
+  const [touched, setTouched] = useState({});
   
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -36,6 +39,68 @@ const Register = () => {
     if (name === 'password') {
       checkPasswordStrength(value);
     }
+
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: null
+      }));
+    }
+  };
+
+  // Field validation function with sanitization
+  const validateField = async (field, value) => {
+    let validation;
+    
+    switch (field) {
+      case 'email':
+        validation = await validateAndSanitize(value, 'email');
+        break;
+      case 'phone':
+        validation = await validateAndSanitize(value, 'phone');
+        break;
+      case 'postalCode':
+        validation = await validateAndSanitize(value, 'postalCode');
+        break;
+      case 'name':
+      case 'address':
+      case 'occupation':
+        validation = await validateAndSanitize(value, 'required');
+        break;
+      default:
+        validation = { value, isValid: true, error: null };
+    }
+    
+    // Update errors state
+    setErrors(prev => ({
+      ...prev,
+      [field]: validation.error
+    }));
+    
+    // Update form data with sanitized value
+    if (validation.value !== value) {
+      setFormData(prev => ({
+        ...prev,
+        [field]: validation.value
+      }));
+    }
+    
+    return validation;
+  };
+
+  // Handle field blur for real-time validation
+  const handleBlur = async (e) => {
+    const { name, value } = e.target;
+    
+    // Mark field as touched
+    setTouched(prev => ({
+      ...prev,
+      [name]: true
+    }));
+    
+    // Validate the field
+    await validateField(name, value);
   };
 
   // パスワード強度チェック関数
@@ -106,11 +171,27 @@ const Register = () => {
     }
   };
 
-  const validateForm = () => {
+  const validateForm = async () => {
+    // Check required fields
     if (!formData.name || !formData.birthDate || !formData.phone || 
         !formData.occupation || !formData.postalCode || !formData.address || 
         !formData.email || !formData.password || !formData.confirmPassword) {
       setError('必須項目を全て入力してください');
+      return false;
+    }
+
+    // Validate all fields with the validation library
+    const validations = await Promise.all([
+      validateField('email', formData.email),
+      validateField('phone', formData.phone),
+      validateField('postalCode', formData.postalCode),
+      validateField('name', formData.name),
+      validateField('address', formData.address)
+    ]);
+
+    const hasValidationErrors = validations.some(v => !v.isValid);
+    if (hasValidationErrors) {
+      setError('入力内容にエラーがあります。各項目を確認してください。');
       return false;
     }
 
@@ -124,27 +205,6 @@ const Register = () => {
     }
     if (age < 18) {
       setError('18歳以上の方のみご利用いただけます');
-      return false;
-    }
-
-    // メールアドレスの形式チェック
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      setError('正しいメールアドレスを入力してください');
-      return false;
-    }
-
-    // 郵便番号の形式チェック（例: 123-4567）
-    const postalCodeRegex = /^\d{3}-?\d{4}$/;
-    if (!postalCodeRegex.test(formData.postalCode)) {
-      setError('郵便番号は「123-4567」の形式で入力してください');
-      return false;
-    }
-
-    // 電話番号の形式チェック（例: 090-1234-5678）
-    const phoneRegex = /^0\d{1,4}-?\d{1,4}-?\d{4}$/;
-    if (!phoneRegex.test(formData.phone)) {
-      setError('正しい電話番号を入力してください');
       return false;
     }
 
@@ -168,7 +228,8 @@ const Register = () => {
     e.preventDefault();
     setError('');
 
-    if (!validateForm()) {
+    const isValid = await validateForm();
+    if (!isValid) {
       return;
     }
 
@@ -214,10 +275,15 @@ const Register = () => {
               name="name"
               value={formData.name}
               onChange={handleChange}
+              onBlur={handleBlur}
               placeholder="山田太郎"
               disabled={loading}
               required
+              className={touched.name && errors.name ? 'error' : ''}
             />
+            {touched.name && errors.name && (
+              <span className="field-error">{errors.name}</span>
+            )}
           </div>
 
           <div className="form-row">
@@ -270,10 +336,15 @@ const Register = () => {
               name="postalCode"
               value={formData.postalCode}
               onChange={handlePostalCodeChange}
+              onBlur={handleBlur}
               placeholder="123-4567"
               disabled={loading}
               required
+              className={touched.postalCode && errors.postalCode ? 'error' : ''}
             />
+            {touched.postalCode && errors.postalCode && (
+              <span className="field-error">{errors.postalCode}</span>
+            )}
           </div>
 
           <div className="form-group">
@@ -284,10 +355,15 @@ const Register = () => {
               name="address"
               value={formData.address}
               onChange={handleChange}
+              onBlur={handleBlur}
               placeholder="東京都新宿区○○1-2-3"
               disabled={loading}
               required
+              className={touched.address && errors.address ? 'error' : ''}
             />
+            {touched.address && errors.address && (
+              <span className="field-error">{errors.address}</span>
+            )}
           </div>
 
           <div className="form-divider"></div>
@@ -300,10 +376,15 @@ const Register = () => {
               name="phone"
               value={formData.phone}
               onChange={handleChange}
+              onBlur={handleBlur}
               placeholder="090-1234-5678"
               disabled={loading}
               required
+              className={touched.phone && errors.phone ? 'error' : ''}
             />
+            {touched.phone && errors.phone && (
+              <span className="field-error">{errors.phone}</span>
+            )}
           </div>
 
           <div className="form-group">
@@ -314,10 +395,15 @@ const Register = () => {
               name="email"
               value={formData.email}
               onChange={handleChange}
+              onBlur={handleBlur}
               placeholder="example@mail.com（ログイン時に使用します）"
               disabled={loading}
               required
+              className={touched.email && errors.email ? 'error' : ''}
             />
+            {touched.email && errors.email && (
+              <span className="field-error">{errors.email}</span>
+            )}
           </div>
 
           <div className="form-row">

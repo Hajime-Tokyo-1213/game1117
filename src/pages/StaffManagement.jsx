@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { validateAndSanitize, validators } from '../utils/validation';
 import './StaffManagement.css';
 
 const StaffManagement = () => {
@@ -16,6 +17,8 @@ const StaffManagement = () => {
     employeeId: ''
   });
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -29,6 +32,79 @@ const StaffManagement = () => {
     const staffUsers = users.filter(u => ['staff', 'manager', 'admin'].includes(u.role));
     setStaffList(staffUsers);
   };
+  
+  // Validate individual field
+  const validateField = async (field, value) => {
+    let validation;
+    
+    switch (field) {
+      case 'email':
+        validation = await validateAndSanitize(value, 'email');
+        break;
+      case 'name':
+      case 'role':
+        validation = await validateAndSanitize(value, 'required');
+        break;
+      default:
+        validation = { value, isValid: true, error: null };
+    }
+    
+    // Update errors state
+    setErrors(prev => ({
+      ...prev,
+      [field]: validation.error
+    }));
+    
+    // Update form data with sanitized value
+    if (validation.value !== value) {
+      setFormData(prev => ({
+        ...prev,
+        [field]: validation.value
+      }));
+    }
+    
+    return validation;
+  };
+  
+  // Validate staff data
+  const validateStaffData = async (staffData) => {
+    const validations = await Promise.all([
+      validateField('email', staffData.email),
+      validateField('name', staffData.name),
+      validateField('role', staffData.role)
+    ]);
+    
+    return {
+      validations,
+      hasErrors: validations.some(v => !v.isValid)
+    };
+  };
+  
+  // Handle field blur for real-time validation
+  const handleBlur = async (e) => {
+    const { name, value } = e.target;
+    
+    // Mark field as touched
+    setTouched(prev => ({
+      ...prev,
+      [name]: true
+    }));
+    
+    // Validate the field
+    await validateField(name, value);
+  };
+  
+  // Display validation errors
+  const displayValidationErrors = (validations) => {
+    const errorMessages = validations
+      .filter(v => !v.isValid)
+      .map(v => v.error)
+      .filter(Boolean);
+    
+    if (errorMessages.length > 0) {
+      setError('入力内容にエラーがあります: ' + errorMessages.join(', '));
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -36,18 +112,27 @@ const StaffManagement = () => {
       ...prev,
       [name]: value
     }));
+    
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: null
+      }));
+    }
   };
 
-  const validateForm = () => {
+  const validateForm = async () => {
     if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
       setError('必須項目を全て入力してください');
       return false;
     }
 
-    // メールアドレスの形式チェック
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      setError('正しいメールアドレスを入力してください');
+    // Validate with the validation library
+    const { validations, hasErrors } = await validateStaffData(formData);
+    
+    if (hasErrors) {
+      displayValidationErrors(validations);
       return false;
     }
 
@@ -77,7 +162,8 @@ const StaffManagement = () => {
     setError('');
     setSuccess('');
 
-    if (!validateForm()) {
+    const isValid = await validateForm();
+    if (!isValid) {
       return;
     }
 
@@ -106,6 +192,8 @@ const StaffManagement = () => {
           department: '',
           employeeId: ''
         });
+        setTouched({});
+        setErrors({});
         setShowCreateForm(false);
         loadStaffList();
         
@@ -189,10 +277,15 @@ const StaffManagement = () => {
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   placeholder="山田太郎"
                   disabled={loading}
                   required
+                  className={touched.name && errors.name ? 'error' : ''}
                 />
+                {touched.name && errors.name && (
+                  <span className="field-error">{errors.name}</span>
+                )}
               </div>
 
               <div className="form-group">
@@ -203,10 +296,15 @@ const StaffManagement = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   placeholder="yamada@gamestore.com"
                   disabled={loading}
                   required
+                  className={touched.email && errors.email ? 'error' : ''}
                 />
+                {touched.email && errors.email && (
+                  <span className="field-error">{errors.email}</span>
+                )}
               </div>
             </div>
 
@@ -218,13 +316,18 @@ const StaffManagement = () => {
                   name="role"
                   value={formData.role}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   disabled={loading}
                   required
+                  className={touched.role && errors.role ? 'error' : ''}
                 >
                   <option value="staff">👤 スタッフ</option>
                   <option value="manager">🔑 マネージャー</option>
                   {isAdmin && <option value="admin">👑 管理者</option>}
                 </select>
+                {touched.role && errors.role && (
+                  <span className="field-error">{errors.role}</span>
+                )}
               </div>
 
               <div className="form-group">

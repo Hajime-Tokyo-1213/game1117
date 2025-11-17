@@ -1,0 +1,93 @@
+{
+  "metadata": {
+    "exportedAt": "2025-11-17T07:19:08.474Z",
+    "source": "sample_generator",
+    "version": "1.0.0"
+  },
+  "users": [
+    {
+      "email": "admin@example.com",
+      "password": "Admin123!@#",
+      "name": "システム管理者",
+      "role": "admin",
+      "phone": "03-1234-5678",
+      "address": "東京都渋谷区1-1-1",
+      "postalCode": "150-0001"
+    },
+    {
+      "email": "staff@example.com",
+      "password": "Staff123!@#",
+      "name": "スタッフ太郎",
+      "role": "staff",
+      "phone": "03-2345-6789",
+      "address": "東京都新宿区2-2-2",
+      "postalCode": "160-0001"
+    }
+  ],
+  "inventory": [
+    {
+      "name": "Nintendo Switch",
+      "category": "consoles",
+      "manufacturer": "nintendo",
+      "condition": "A",
+      "purchasePrice": 25000,
+      "sellingPrice": 35000,
+      "quantity": 5,
+      "model": "HAC-001",
+      "description": "人気のゲーム機"
+    },
+    {
+      "name": "PlayStation 5",
+      "category": "consoles",
+      "manufacturer": "sony",
+      "condition": "S",
+      "purchasePrice": 45000,
+      "sellingPrice": 60000,
+      "quantity": 3,
+      "model": "CFI-1200A01",
+      "description": "最新ゲーム機"
+    }
+  ],
+  "buybackRequests": [
+    {
+      "customerName": "山田太郎",
+      "email": "yamada@example.com",
+      "phone": "090-1234-5678",
+      "address": "東京都渋谷区3-3-3",
+      "postalCode": "150-0003",
+      "items": [
+        "Nintendo Switch",
+        "ゲームソフト10本"
+      ],
+      "estimatedValue": 40000,
+      "status": "pending",
+      "notes": "状態良好"
+    }
+  ],
+  "salesData": [
+    {
+      "orderNumber": "ORD-2024001",
+      "customerId": 1,
+      "subtotal": 35000,
+      "taxAmount": 3500,
+      "totalAmount": 38500,
+      "paymentMethod": "credit_card",
+      "status": "completed",
+      "orderedAt": "2025-11-17T07:19:08.475Z"
+    }
+  ],
+  "antiquitiesLedger": [
+    {
+      "entryNumber": "ENT-2024001",
+      "date": "2025-11-17T07:19:08.475Z",
+      "type": "purchase",
+      "itemName": "Nintendo Switch",
+      "description": "ゲーム機",
+      "customerName": "田中次郎",
+      "customerAddress": "東京都新宿区4-4-4",
+      "idType": "drivers_license",
+      "idNumber": "123456789",
+      "price": 25000
+    }
+  ]
+}

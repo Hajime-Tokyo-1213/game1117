@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { validateAndSanitize, validators } from '../utils/validation';
 import './Ledger.css';
 import { loadLedgerRecords as loadLedgerStorage, migrateLegacyLedgerData } from '../utils/ledgerRecords';
 
@@ -38,6 +39,63 @@ const Ledger = () => {
     skuSearch: '',
     customerSearch: ''
   });
+
+  // Validation states
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
+
+  // Validate and sanitize search inputs
+  const validateSearchInput = async (fieldName, value) => {
+    if (!value) return true;
+
+    const validation = await validateAndSanitize(value, 'required');
+    
+    // Prevent SQL injection-like patterns
+    const dangerousPatterns = [
+      /[;<>]/g,  // Dangerous characters
+      /(\bOR\b|\bAND\b|\bDROP\b|\bDELETE\b|\bINSERT\b|\bUPDATE\b)/gi,  // SQL keywords
+      /['"]/g  // Quotes that might be used for injection
+    ];
+    
+    for (const pattern of dangerousPatterns) {
+      if (pattern.test(value)) {
+        setErrors(prev => ({ 
+          ...prev, 
+          [fieldName]: '検索条件に使用できない文字が含まれています' 
+        }));
+        return false;
+      }
+    }
+    
+    // Clear error if validation passes
+    setErrors(prev => ({ ...prev, [fieldName]: null }));
+    
+    // Update filter with sanitized value
+    if (validation.value !== value) {
+      setFilters(prev => ({ ...prev, [fieldName]: validation.value }));
+    }
+    
+    return true;
+  };
+
+  // Handle filter field change with validation
+  const handleFilterChange = async (fieldName, value) => {
+    // For search fields, validate and sanitize
+    if (['productSearch', 'skuSearch', 'customerSearch'].includes(fieldName)) {
+      const isValid = await validateSearchInput(fieldName, value);
+      if (isValid) {
+        setFilters(prev => ({ ...prev, [fieldName]: value }));
+      }
+    } else {
+      // For other fields, update directly
+      setFilters(prev => ({ ...prev, [fieldName]: value }));
+    }
+  };
+
+  // Handle field blur
+  const handleFieldBlur = (fieldName) => {
+    setTouched(prev => ({ ...prev, [fieldName]: true }));
+  };
 
   const loadLedgerRecords = useCallback(() => {
     const ledgerRecords = loadLedgerStorage();
@@ -280,9 +338,6 @@ const Ledger = () => {
     loadLedgerRecords();
   }, [loadLedgerRecords]);
 
-  const handleFilterChange = (field, value) => {
-    setFilters({ ...filters, [field]: value });
-  };
 
   const handleSearch = () => {
     // フィルター条件に基づいてレコードを再読み込み

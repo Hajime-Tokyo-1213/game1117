@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { validateAndSanitize, validators } from '../utils/validation';
 import { manufacturers, conditions, accessories } from '../data/gameConsoles';
 import { getAllConsoles, getConsoleColorList } from '../utils/productMaster';
 import { generateManagementNumber } from '../utils/productCodeGenerator';
@@ -26,6 +27,8 @@ const BuybackApplication = () => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [availableConsoles, setAvailableConsoles] = useState([]);
   const [allGameConsoles, setAllGameConsoles] = useState({});
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
 
   // コンポーネント初期化時に全機種を読み込み
   useEffect(() => {
@@ -36,6 +39,65 @@ const BuybackApplication = () => {
   const [shippingInfo, setShippingInfo] = useState({
     shippingMethod: 'customer' // 'customer'(お客様負担) or 'cashOnDelivery'(着払い)
   });
+
+  // Validate buyback form data
+  const validateBuybackForm = async (formData) => {
+    const validations = [];
+    
+    // Validate required fields based on product type
+    if (formData.productType === 'console') {
+      if (formData.manufacturer) {
+        const manufacturerValidation = await validateAndSanitize(formData.manufacturer, 'required');
+        if (!manufacturerValidation.isValid) {
+          setErrors(prev => ({ ...prev, manufacturer: 'メーカーを選択してください' }));
+        }
+        validations.push(manufacturerValidation);
+      }
+      
+      if (formData.console || formData.consoleCustomName) {
+        const consoleValidation = await validateAndSanitize(
+          formData.console || formData.consoleCustomName, 
+          'required'
+        );
+        if (!consoleValidation.isValid) {
+          setErrors(prev => ({ ...prev, console: '機種を選択してください' }));
+        }
+        validations.push(consoleValidation);
+      }
+    } else if (formData.productType === 'software') {
+      const softwareValidation = await validateAndSanitize(formData.softwareName, 'required');
+      if (!softwareValidation.isValid) {
+        setErrors(prev => ({ ...prev, softwareName: 'ソフト名を入力してください' }));
+      }
+      validations.push(softwareValidation);
+    }
+    
+    // Validate condition
+    const conditionValidation = await validateAndSanitize(formData.condition, 'required');
+    if (!conditionValidation.isValid) {
+      setErrors(prev => ({ ...prev, condition: '状態を選択してください' }));
+    }
+    validations.push(conditionValidation);
+    
+    return {
+      validations,
+      hasErrors: validations.some(v => !v.isValid)
+    };
+  };
+
+  // Handle field blur for validation
+  const handleFieldBlur = async (fieldName, value) => {
+    setTouched(prev => ({ ...prev, [fieldName]: true }));
+    
+    if (fieldName && value) {
+      const validation = await validateAndSanitize(value, 'required');
+      if (!validation.isValid) {
+        setErrors(prev => ({ ...prev, [fieldName]: '必須項目です' }));
+      } else {
+        setErrors(prev => ({ ...prev, [fieldName]: null }));
+      }
+    }
+  };
 
   // メーカー選択時に機種リストを更新
   const handleManufacturerChange = (manufacturerValue) => {

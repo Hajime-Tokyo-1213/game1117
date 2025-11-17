@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { validateAndSanitize, validators } from '../utils/validation';
 import './AccountSettings.css';
 
 const AccountSettings = () => {
@@ -37,10 +38,69 @@ const AccountSettings = () => {
   });
 
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [addressLoading, setAddressLoading] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
+
+  // Field validation with sanitization
+  const validateField = async (field, value) => {
+    let validation;
+    
+    switch (field) {
+      case 'email':
+      case 'companyInfoEmail':
+        validation = await validateAndSanitize(value, 'email');
+        break;
+      case 'phone':
+        validation = await validateAndSanitize(value, 'phone');
+        break;
+      case 'postalCode':
+      case 'companyInfoPostalCode':
+        validation = await validateAndSanitize(value, 'postalCode');
+        break;
+      case 'name':
+      case 'address':
+      case 'companyInfoName':
+      case 'companyInfoAddress':
+        validation = await validateAndSanitize(value, 'required');
+        break;
+      default:
+        validation = { value, isValid: true, error: null };
+    }
+    
+    // Update errors state
+    setErrors(prev => ({
+      ...prev,
+      [field]: validation.error
+    }));
+    
+    // Update form data with sanitized value
+    if (validation.value !== value) {
+      setFormData(prev => ({
+        ...prev,
+        [field]: validation.value
+      }));
+    }
+    
+    return validation;
+  };
+
+  // Handle field blur for real-time validation
+  const handleBlur = async (e) => {
+    const { name, value } = e.target;
+    
+    // Mark field as touched
+    setTouched(prev => ({
+      ...prev,
+      [name]: true
+    }));
+    
+    // Validate the field
+    await validateField(name, value);
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -48,6 +108,14 @@ const AccountSettings = () => {
       ...prev,
       [name]: value
     }));
+    
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: null
+      }));
+    }
   };
 
   const handlePasswordChange = (e) => {
@@ -89,71 +157,75 @@ const AccountSettings = () => {
     }
   };
 
-  const validateForm = () => {
+  const validateForm = async () => {
+    // Validate with the validation library based on user type
+    let fieldsToValidate = [];
+    
     // スタッフ・マネージャー・管理者の場合
     if (isStaff || isAdmin || isManager) {
       if (!formData.name || !formData.email) {
         setError('必須項目を全て入力してください');
         return false;
       }
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email)) {
-        setError('有効なメールアドレスを入力してください');
-        return false;
-      }
-      return true;
+      fieldsToValidate = [
+        { field: 'name', value: formData.name },
+        { field: 'email', value: formData.email }
+      ];
     }
-
-    // 海外バイヤーの場合は簡易チェック
-    if (isOverseasCustomer) {
+    // 海外バイヤーの場合
+    else if (isOverseasCustomer) {
       if (!formData.name || !formData.phone || !formData.postalCode || !formData.address || !formData.email) {
         setError('Please fill in all required fields');
         return false;
       }
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email)) {
-        setError('Please enter a valid email address');
+      fieldsToValidate = [
+        { field: 'name', value: formData.name },
+        { field: 'email', value: formData.email },
+        { field: 'phone', value: formData.phone },
+        { field: 'address', value: formData.address }
+      ];
+    }
+    // 国内顧客の場合
+    else {
+      if (!formData.name || !formData.birthDate || !formData.phone || 
+          !formData.occupation || !formData.postalCode || !formData.address || 
+          !formData.email) {
+        setError('必須項目を全て入力してください');
         return false;
       }
-      return true;
+      fieldsToValidate = [
+        { field: 'name', value: formData.name },
+        { field: 'email', value: formData.email },
+        { field: 'phone', value: formData.phone },
+        { field: 'postalCode', value: formData.postalCode },
+        { field: 'address', value: formData.address }
+      ];
+      
+      // 生年月日のチェック（18歳以上）
+      const birthDate = new Date(formData.birthDate);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        setError('18歳以上の方のみご利用いただけます');
+        return false;
+      }
     }
-
-    // 国内顧客の場合
-    if (!formData.name || !formData.birthDate || !formData.phone || 
-        !formData.occupation || !formData.postalCode || !formData.address || 
-        !formData.email) {
-      setError('必須項目を全て入力してください');
-      return false;
-    }
-
-    // 生年月日のチェック（18歳以上）
-    const birthDate = new Date(formData.birthDate);
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    if (age < 18) {
-      setError('18歳以上の方のみご利用いただけます');
-      return false;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      setError('正しいメールアドレスを入力してください');
-      return false;
-    }
-
-    const postalCodeRegex = /^\d{3}-?\d{4}$/;
-    if (!postalCodeRegex.test(formData.postalCode)) {
-      setError('郵便番号は「123-4567」の形式で入力してください');
-      return false;
-    }
-
-    const phoneRegex = /^0\d{1,4}-?\d{1,4}-?\d{4}$/;
-    if (!phoneRegex.test(formData.phone)) {
-      setError('正しい電話番号を入力してください');
+    
+    // Validate all fields
+    const validations = await Promise.all(
+      fieldsToValidate.map(({ field, value }) => validateField(field, value))
+    );
+    
+    const hasValidationErrors = validations.some(v => !v.isValid);
+    if (hasValidationErrors) {
+      const errorMessage = isOverseasCustomer 
+        ? 'Please correct the errors in the form' 
+        : '入力内容にエラーがあります。各項目を確認してください。';
+      setError(errorMessage);
       return false;
     }
 
@@ -165,7 +237,8 @@ const AccountSettings = () => {
     setError('');
     setSuccess('');
 
-    if (!validateForm()) {
+    const isValid = await validateForm();
+    if (!isValid) {
       return;
     }
 
@@ -261,9 +334,14 @@ const AccountSettings = () => {
                     name="name"
                     value={formData.name}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                     disabled={loading}
                     required
+                    className={touched.name && errors.name ? 'error' : ''}
                   />
+                  {touched.name && errors.name && (
+                    <span className="field-error">{errors.name}</span>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -301,9 +379,14 @@ const AccountSettings = () => {
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
+                  onBlur={handleBlur}
                   disabled={loading}
                   required
+                  className={touched.name && errors.name ? 'error' : ''}
                 />
+                {touched.name && errors.name && (
+                  <span className="field-error">{errors.name}</span>
+                )}
               </div>
             )}
 
@@ -373,10 +456,15 @@ const AccountSettings = () => {
                 name="postalCode"
                 value={formData.postalCode}
                 onChange={isOverseasCustomer ? handleChange : handlePostalCodeChange}
+                onBlur={handleBlur}
                 placeholder={isOverseasCustomer ? 'e.g., 10001' : '123-4567'}
                 disabled={loading}
                 required
+                className={touched.postalCode && errors.postalCode ? 'error' : ''}
               />
+              {touched.postalCode && errors.postalCode && (
+                <span className="field-error">{errors.postalCode}</span>
+              )}
             </div>
 
             <div className="form-group">
@@ -387,10 +475,15 @@ const AccountSettings = () => {
                 name="address"
                 value={formData.address}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 placeholder={isOverseasCustomer ? 'Street Address, City, State' : '東京都新宿区○○1-2-3'}
                 disabled={loading}
                 required
+                className={touched.address && errors.address ? 'error' : ''}
               />
+              {touched.address && errors.address && (
+                <span className="field-error">{errors.address}</span>
+              )}
             </div>
 
             {isOverseasCustomer && formData.country && (
@@ -416,10 +509,15 @@ const AccountSettings = () => {
                 name="phone"
                 value={formData.phone}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 placeholder={isOverseasCustomer ? '+1-123-456-7890' : '090-1234-5678'}
                 disabled={loading}
                 required
+                className={touched.phone && errors.phone ? 'error' : ''}
               />
+              {touched.phone && errors.phone && (
+                <span className="field-error">{errors.phone}</span>
+              )}
             </div>
 
             <div className="form-group">
@@ -430,9 +528,14 @@ const AccountSettings = () => {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 disabled={loading}
                 required
+                className={touched.email && errors.email ? 'error' : ''}
               />
+              {touched.email && errors.email && (
+                <span className="field-error">{errors.email}</span>
+              )}
             </div>
 
             <button type="submit" className="update-button" disabled={loading}>

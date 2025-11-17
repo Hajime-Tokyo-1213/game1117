@@ -36,7 +36,7 @@ const Unauthorized = () => {
         <div className="error-details">
           <p>このページを表示する権限がありません。</p>
           
-          {\* 詳細情報の表示 *\}
+          {/* 詳細情報の表示 */}
           {user && (
             <div className="user-info">
               <p>現在のアカウント: <strong>{user.name}</strong></p>
